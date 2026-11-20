@@ -31,3 +31,6 @@ build/
 !default.mode2v3
 !default.pbxuser
 !default.perspectivev3
+
+# Firebase configuration supplied locally before the iOS build.
+/Runner/GoogleService-Info.plist
