@@ -1,0 +1,202 @@
+// SPDX-FileCopyrightText: 2019-Present Christian Kußowski
+// SPDX-FileCopyrightText: 2019-Present Contributors to FluffyChat
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import 'package:fluffychat/config/app_config.dart';
+import 'package:fluffychat/config/setting_keys.dart';
+import 'package:flutter/services.dart';
+import 'package:material_ui/material_ui.dart';
+
+abstract class FluffyThemes {
+  static const double columnWidth = 380.0;
+
+  static const double maxTimelineWidth = columnWidth * 2;
+
+  static const double navRailWidth = 80.0;
+
+  static bool isColumnModeByWidth(double width) =>
+      width > columnWidth * 2 + navRailWidth;
+
+  static bool isColumnMode(BuildContext context) =>
+      isColumnModeByWidth(MediaQuery.sizeOf(context).width);
+
+  static bool isThreeColumnMode(BuildContext context) =>
+      MediaQuery.sizeOf(context).width > FluffyThemes.columnWidth * 3.5;
+
+  static LinearGradient backgroundGradient(BuildContext context, int alpha) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return LinearGradient(
+      begin: Alignment.topCenter,
+      colors: [
+        colorScheme.primaryContainer.withAlpha(alpha),
+        colorScheme.secondaryContainer.withAlpha(alpha),
+        colorScheme.tertiaryContainer.withAlpha(alpha),
+        colorScheme.primaryContainer.withAlpha(alpha),
+      ],
+    );
+  }
+
+  static const Duration animationDuration = Duration(milliseconds: 250);
+  static const Curve animationCurve = Curves.easeInOut;
+
+  /// v1.10.4 · 全局主色默认值：晴空蓝（与聊天气泡默认色同一个值）。
+  static const int kDefaultSeedInt = 0xFF5B87C4;
+
+  /// v1.10.4 · 历史上出现过的所有紫色 seed。设备里存的是其中之一 →
+  /// 视为「用户没主动选过蓝色」，跟随新默认色，否则老用户升级后还是一片紫。
+  /// 覆盖：v1.10.1 旧默认紫、FluffyChat 原生 primaryColor（设置里「默认」）、
+  /// 色板里的雾紫 / 藕荷、聊天气泡的暮紫，以及 v1.10.2 那版天空蓝默认值。
+  static const Set<int> kLegacyPurpleSeeds = <int>{
+    0xFF5625BA, // v1.10.1 及以前的默认紫
+    0xFF261386, // FluffyChat 原生 primaryColor（设置里「默认」选项）
+    0xFF7A6A9C, // 雾紫
+    0xFFA1839B, // 藕荷
+    0xFF955CA3, // 暮紫
+    0xFF2196F3, // v1.10.2/v1.10.3 的默认天空蓝（同属蓝，统一到晴空蓝一族）
+  };
+
+  /// 浅色模式下把容器色固定成中性灰阶，主色只出现在强调元素上。
+  /// （M3 的 surfaceContainer* 会带主色色调，rainbow 变体尤其明显，卡片会发紫）
+  static const Color _lightSurface = Color(0xFFFFFFFF);
+  static const Color _lightContainerLowest = Color(0xFFFFFFFF);
+  static const Color _lightContainerLow = Color(0xFFF7F8FA);
+  static const Color _lightContainer = Color(0xFFF1F3F6);
+  static const Color _lightContainerHigh = Color(0xFFEAEDF1);
+  static const Color _lightContainerHighest = Color(0xFFE2E6EC);
+
+  static ThemeData buildTheme(
+    BuildContext context,
+    Brightness brightness, [
+    Color? seed,
+  ]) {
+    final stored = AppSettings.colorSchemeSeedInt.value;
+    // v1.20.1：seed 还可能来自 FluffyChat 原有的 primary_color 偏好键（设置配色时也会写）。
+    // 那个键没做过迁移，如果它是历史紫值，主题会一直是紫的——这里一并迁到晴空蓝。
+    final incoming = seed;
+    final effectiveSeed =
+        (incoming != null && kLegacyPurpleSeeds.contains(incoming.toARGB32()))
+            ? null
+            : incoming;
+    final seedColor = effectiveSeed ??
+        Color(kLegacyPurpleSeeds.contains(stored) ? kDefaultSeedInt : stored);
+    var colorScheme = ColorScheme.fromSeed(
+      brightness: brightness,
+      seedColor: seedColor,
+      // rainbow 会把主色色调大量掺进容器色；tonalSpot 是 M3 默认，容器基本中性
+      dynamicSchemeVariant: DynamicSchemeVariant.tonalSpot,
+    );
+    if (brightness == Brightness.light) {
+      colorScheme = colorScheme.copyWith(
+        surface: _lightSurface,
+        surfaceContainerLowest: _lightContainerLowest,
+        surfaceContainerLow: _lightContainerLow,
+        surfaceContainer: _lightContainer,
+        surfaceContainerHigh: _lightContainerHigh,
+        surfaceContainerHighest: _lightContainerHighest,
+        surfaceTint: Colors.transparent,
+      );
+    }
+    final isColumnMode = FluffyThemes.isColumnMode(context);
+    final dividerColor = brightness == Brightness.dark
+        ? colorScheme.surfaceContainerHighest
+        : colorScheme.surfaceContainer;
+    return ThemeData(
+      visualDensity: VisualDensity.standard,
+      useMaterial3: true,
+      brightness: brightness,
+      colorScheme: colorScheme,
+      dividerColor: dividerColor,
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: SegmentedButton.styleFrom(
+          iconColor: colorScheme.onSurface,
+          disabledIconColor: colorScheme.onSurface,
+        ),
+      ),
+      textSelectionTheme: TextSelectionThemeData(
+        selectionColor: colorScheme.onSurface.withAlpha(128),
+        selectionHandleColor: colorScheme.secondary,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppConfig.borderRadius / 2),
+        ),
+        contentPadding: const EdgeInsets.all(12),
+      ),
+      chipTheme: ChipThemeData(
+        showCheckmark: false,
+        backgroundColor: colorScheme.surfaceContainer,
+        side: BorderSide.none,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppConfig.borderRadius),
+        ),
+      ),
+      appBarTheme: AppBarTheme(
+        toolbarHeight: isColumnMode ? 72 : 56,
+        surfaceTintColor: isColumnMode ? colorScheme.surface : null,
+        backgroundColor: isColumnMode ? colorScheme.surface : null,
+        actionsPadding: isColumnMode
+            ? const EdgeInsets.symmetric(horizontal: 16.0)
+            : null,
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: brightness.reversed,
+          statusBarBrightness: brightness,
+          systemNavigationBarIconBrightness: brightness.reversed,
+          systemNavigationBarColor: colorScheme.surface,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(width: 1, color: colorScheme.primary),
+          shape: RoundedRectangleBorder(
+            side: BorderSide(color: colorScheme.primary),
+            borderRadius: BorderRadius.circular(AppConfig.borderRadius / 2),
+          ),
+        ),
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        strokeCap: StrokeCap.round,
+        color: colorScheme.primary,
+        refreshBackgroundColor: colorScheme.primaryContainer,
+      ),
+      snackBarTheme: isColumnMode
+          ? const SnackBarThemeData(
+              showCloseIcon: true,
+              behavior: SnackBarBehavior.floating,
+              width: FluffyThemes.columnWidth * 1.5,
+            )
+          : const SnackBarThemeData(behavior: SnackBarBehavior.floating),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: colorScheme.secondaryContainer,
+          foregroundColor: colorScheme.onSecondaryContainer,
+          elevation: 0,
+          padding: const EdgeInsets.all(16),
+          textStyle: const TextStyle(fontSize: 16),
+        ),
+      ),
+    );
+  }
+}
+
+extension on Brightness {
+  Brightness get reversed =>
+      this == Brightness.dark ? Brightness.light : Brightness.dark;
+}
+
+extension BubbleColorTheme on ThemeData {
+  Color get bubbleColor => brightness == Brightness.light
+      ? colorScheme.primary
+      : colorScheme.primaryContainer;
+
+  Color get onBubbleColor => brightness == Brightness.light
+      ? colorScheme.onPrimary
+      : colorScheme.onPrimaryContainer;
+
+  Color get secondaryBubbleColor => HSLColor.fromColor(
+    brightness == Brightness.light
+        ? colorScheme.tertiary
+        : colorScheme.tertiaryContainer,
+  ).withSaturation(0.5).toColor();
+}
