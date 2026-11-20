@@ -62,7 +62,7 @@ jobs:
 
       # 冷启动要下 NDK(≈1G)+CMake+3 套 Rust std，占掉 9 分钟；缓存后基本秒过
       - name: 缓存 Gradle / NDK / CMake
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.gradle/caches
