@@ -22,17 +22,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          # 上游 lockfile 已迁到 pnpm 12 的双文档格式，pnpm 10 会报 broken lockfile
-          version: 12
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22.18.0
-          cache: pnpm
+
+      # 不用 pnpm/action-setup：它把 pnpm 放在临时目录，
+      # 而上游的 git 依赖（matrix-js-sdk#develop）安装时会 fork 出
+      # `pnpm build` 子进程，在 %TEMP% 下找不到该可执行文件。
+      # 全局装到 %APPDATA%\npm 才能被子进程解析到。
+      - name: Setup pnpm
+        shell: pwsh
+        run: |
+          npm i -g pnpm@12 --no-fund --no-audit
+          pnpm --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
