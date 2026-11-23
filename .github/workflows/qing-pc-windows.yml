@@ -37,14 +37,17 @@ jobs:
           npm i -g pnpm@12 --no-fund --no-audit
           pnpm --version
 
+      # 上游 allowBuilds 白名单只有 matrix-js-sdk / @sentry/cli / nx：
+      #   - matrix-js-sdk 是 git 依赖，pnpm 会展开成超长目录后跑 `pnpm build`，
+      #     Windows 上 cmd 进不去该目录（The system cannot find the path specified）；
+      #     webpack 的 alias 直接指向它的 src，本来也不需要构建产物，跳过即可。
+      #   - @sentry/cli 与 nx 的构建本就不需要（上游也标注了 false）。
+      # 根 postinstall（scripts/pnpm-link.ts）负责链接 workspace 包，需手动补回。
       - name: Install dependencies
-        env:
-          # matrix-js-sdk 是 git 依赖，pnpm 会把它展开成
-          # node_modules/.pnpm/matrix-js-sdk@https+++codeload.github.com+... 的超长目录，
-          # Windows 上 cmd 进不去（The system cannot find the path specified），
-          # 缩短虚拟 store 目录名即可。
-          npm_config_virtual_store_dir_max_length: "60"
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Link workspace packages
+        run: node scripts/pnpm-link.ts
 
       # nx 的 native task hasher 在 Windows 上会因非 UTF-8 字节直接崩溃，
       # 这里显式按依赖顺序构建，绕过 nx。
