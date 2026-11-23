@@ -1,0 +1,31 @@
+{
+    "$schema": "../../node_modules/nx/schemas/project-schema.json",
+    "projectType": "library",
+    "targets": {
+        "build": {
+            "cache": true,
+            "command": "vite build",
+            "inputs": [
+                "production",
+                "buildConfig",
+                "{workspaceRoot}/modules/tsconfig.json",
+                "{workspaceRoot}/packages/module-api/vite.base.ts",
+                { "dependentTasksOutputFiles": "**/*" }
+            ],
+            "outputs": ["{projectRoot}/lib"],
+            "options": { "cwd": "modules/widget-toggles" },
+            "dependsOn": ["^build"]
+        },
+        "test:unit": {
+            "command": "vitest run",
+            "options": { "cwd": "modules/widget-toggles" }
+        },
+        "lint:types": {
+            "command": "tsc --noEmit",
+            "options": {
+                "cwd": "modules/widget-toggles"
+            },
+            "dependsOn": ["^build"]
+        }
+    }
+}

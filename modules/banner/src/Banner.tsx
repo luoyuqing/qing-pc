@@ -1,0 +1,83 @@
+/*
+Copyright 2025 New Vector Ltd.
+
+SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial
+Please see LICENSE files in the repository root for full details.
+*/
+
+import { type FC } from "react";
+import styled from "styled-components";
+import { type I18nApi } from "@element-hq/element-web-module-api";
+import { Heading } from "@vector-im/compound-web";
+
+import { type ModuleConfig } from "./config";
+import UniventionMenu from "./Univention/Menu";
+import Menu from "./Menu";
+import Logo from "./Logo.tsx";
+
+const Root = styled.nav`
+    height: ${({ theme }): string => theme.bannerHeight};
+    background-color: ${({ theme }): string => theme.bannerBackgroundColor};
+    border-bottom: "var(--cpd-border-width-1) solid var(--cpd-color-bg-subtle-primary)";
+    display: flex;
+    gap: var(--cpd-space-3x);
+
+    a {
+        display: contents;
+        text-decoration: none;
+    }
+
+    h1 {
+        align-self: center;
+        color: ${({ theme }): string => theme.textColor};
+    }
+`;
+
+interface Props {
+    i18n: I18nApi;
+    logoUrl: string;
+    /** Height of the logo in pixels, defaults to 35 */
+    logoHeight?: number;
+    href: string;
+    menu: ModuleConfig["menu"];
+    title: string;
+}
+
+const Banner: FC<Props> = ({ i18n, logoUrl, logoHeight = 35, href, menu, title }) => {
+    let menuJsx;
+    switch (menu.type) {
+        case "static": {
+            menuJsx = <Menu i18n={i18n} config={menu} data={menu} fallbackLogoUrl={logoUrl} />;
+            break;
+        }
+        case "univention": {
+            menuJsx = <UniventionMenu i18n={i18n} config={menu} fallbackLogoUrl={logoUrl} />;
+            break;
+        }
+    }
+
+    let headingJsx = (
+        <>
+            <Logo i18n={i18n} src={logoUrl} height={`${logoHeight}px`} />
+            <Heading size="sm" weight="medium" as="h1">
+                {title}
+            </Heading>
+        </>
+    );
+    if (href) {
+        headingJsx = (
+            <a href={href} aria-label={i18n.translate("logo_link_label")}>
+                {headingJsx}
+            </a>
+        );
+    }
+
+    return (
+        <Root>
+            {menuJsx}
+            {headingJsx}
+        </Root>
+    );
+};
+
+export default Banner;

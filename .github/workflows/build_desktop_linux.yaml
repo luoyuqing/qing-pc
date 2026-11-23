@@ -1,0 +1,160 @@
+on:
+    workflow_call:
+        inputs:
+            ref:
+                type: string
+                required: false
+                description: "The git ref to checkout, defaults to the default branch"
+            arch:
+                type: string
+                required: true
+                description: "The architecture to build for, one of 'amd64' | 'arm64'"
+            version:
+                type: string
+                required: false
+                description: "Version string to override the one in package.json, used for non-release builds"
+            blob_report:
+                type: boolean
+                required: false
+                description: "Whether to run the blob report"
+            prepare-artifact-name:
+                type: string
+                required: false
+                description: |
+                    The name of the prepare artifact to use, defaults to 'desktop-prepare'.
+                    The artifact must contain the following:
+                    + webapp.asar - the asar archive of the webapp to embed in the desktop app
+                    + changelog.Debian - the changelog file to embed in the Debian package
+                    + variant.json - the variant configuration to use for the build
+
+                    The artifact can also contain any additional files which will be applied as overrides to the checkout root before building,
+                    for example icons in the `build/` directory to override the app icons.
+                default: "desktop-prepare"
+            test:
+                type: boolean
+                required: false
+                default: true
+                description: "Whether to run the test stage after building"
+            test-args:
+                type: string
+                required: false
+                description: "Additional arguments to pass to playwright"
+            runs-on:
+                type: string
+                required: false
+                description: "The runner image to use, normally set for you, may be needed for running in private repos."
+            artifact-prefix:
+                type: string
+                required: false
+                description: "An optional prefix to add to the artifact name, useful for distinguishing builds in private repos."
+                default: ""
+            targets:
+                type: string
+                required: false
+                description: "List of targets to build"
+                default: "tar.gz deb"
+permissions:
+    contents: read
+jobs:
+    build:
+        name: Build Linux ${{ inputs.arch }}
+        runs-on: ${{ inputs.runs-on || (inputs.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04') }}
+        env:
+            BUILDENV_DOCKER_IMAGE: ghcr.io/element-hq/element-web/desktop-build-env:${{ case(github.event_name == 'push', inputs.ref || github.ref_name, github.event_name == 'release', 'staging', 'develop') }}
+            # Only element-desktop's deps are installed, stop pnpm reinstalling the workspace before each run/exec
+            PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+              with:
+                  repository: element-hq/element-web
+                  ref: ${{ inputs.ref }}
+                  persist-credentials: false
+
+            - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+              with:
+                  name: ${{ inputs.prepare-artifact-name }}
+                  path: apps/desktop
+
+            - name: "Get modified files"
+              id: changed_files
+              if: github.event_name == 'pull_request' && github.repository == 'element-hq/element-web'
+              uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47
+              with:
+                  files: |
+                      apps/desktop/dockerbuild/**
+
+            # This allows contributors to test changes to the dockerbuild image within a pull request
+            - name: Build docker image
+              uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+              if: steps.changed_files.outputs.any_modified == 'true' || github.event_name == 'merge_group'
+              with:
+                  file: apps/desktop/dockerbuild/Dockerfile
+                  context: apps/desktop
+                  load: true
+                  platforms: linux/${{ inputs.arch }}
+                  tags: ${{ env.BUILDENV_DOCKER_IMAGE }}
+
+            # Install dependencies inside container so we compile native modules (like pkcs11js)
+            # against bookworm's glibc.
+            # The container runs as the runner's user so that the files it writes stay owned by the runner,
+            # with a writable HOME for the pnpm, node-gyp & electron-builder caches.
+            - name: Install Deps
+              run: |
+                  docker run \
+                    -v ${{ github.workspace }}:/work -w /work/apps/desktop \
+                    --user "$(id -u):$(id -g)" -e HOME=/tmp \
+                    -e CI=1 \
+                    $BUILDENV_DOCKER_IMAGE \
+                    pnpm install --frozen-lockfile --filter element-desktop
+
+            - name: Generate debian files and arguments
+              working-directory: apps/desktop
+              run: |
+                  if [ -f changelog.Debian ]; then
+                      echo "ED_DEBIAN_CHANGELOG=changelog.Debian" >> $GITHUB_ENV
+                  fi
+
+            - name: Build App
+              run: |
+                  docker run \
+                    -v ${{ github.workspace }}:/work -w /work/apps/desktop \
+                    --user "$(id -u):$(id -g)" -e HOME=/tmp \
+                    -e CI=1 \
+                    -e VARIANT_PATH \
+                    -e VERSION \
+                    -e ED_DEBIAN_CHANGELOG \
+                    -e PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN \
+                    $BUILDENV_DOCKER_IMAGE \
+                    pnpm run build --publish never $BUILD_ARGS -l $TARGETS
+              env:
+                  VARIANT_PATH: variant.json
+                  # Only set for Nightly builds
+                  VERSION: ${{ inputs.version }}
+                  BUILD_ARGS: ${{ case(inputs.arch == 'arm64', '--arm64', '') }}
+                  TARGETS: ${{ inputs.targets }}
+
+            # We exclude *-unpacked as it loses permissions and the tarball contains it with correct permissions
+            - name: Upload Artifacts
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+              with:
+                  name: ${{ inputs.artifact-prefix }}linux-${{ inputs.arch }}
+                  path: |
+                      apps/desktop/dist
+                      !apps/desktop/dist/*-unpacked/**
+                  retention-days: 1
+
+    test:
+        name: Test Linux ${{ inputs.arch }}
+        needs: build
+        if: inputs.test && contains(inputs.targets, 'deb')
+        uses: ./.github/workflows/build_desktop_test.yaml
+        with:
+            project: linux-${{ inputs.arch }}
+            artifact: ${{ inputs.artifact-prefix }}linux-${{ inputs.arch }}
+            runs-on: ${{ inputs.runs-on || (inputs.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04') }}
+            executable: /opt/Element*/element-desktop*
+            prepare_cmd: |
+                sudo apt-get -qq update
+                sudo apt install ./dist/*.deb
+            blob_report: ${{ inputs.blob_report }}
+            args: ${{ inputs.test-args }}

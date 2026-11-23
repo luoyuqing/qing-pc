@@ -1,0 +1,12 @@
+name: Pull Request
+on:
+    pull_request:
+        types: [opened, edited, labeled, unlabeled, synchronize]
+    merge_group:
+        types: [checks_requested]
+permissions: {}
+jobs:
+    action:
+        uses: matrix-org/matrix-js-sdk/.github/workflows/pull_request.yaml@develop # zizmor: ignore[unpinned-uses]
+        permissions:
+            pull-requests: read

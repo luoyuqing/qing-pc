@@ -1,0 +1,81 @@
+name: Qing PC Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - element
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 300
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web app
+        run: pnpm --filter element-web exec nx build
+
+      - name: Pack webapp.asar
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force apps/desktop/webapp -ErrorAction SilentlyContinue
+          Copy-Item -Recurse apps/web/webapp apps/desktop/webapp
+          Push-Location apps/desktop
+          pnpm exec asar p webapp webapp.asar
+          Pop-Location
+          Get-ChildItem apps/desktop/webapp.asar | Format-List Name, Length
+
+      - name: Build desktop main process
+        run: pnpm --filter element-desktop exec nx run-many -t build:ts build:res
+
+      - name: Package Windows zip
+        shell: pwsh
+        run: |
+          Push-Location apps/desktop
+          pnpm exec electron-builder --win zip --x64 --publish never
+          Pop-Location
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          Get-ChildItem apps/desktop/dist -Filter *.zip -Recurse | Copy-Item -Destination out
+          Get-ChildItem apps/desktop/dist -Filter *.exe -Recurse | Copy-Item -Destination out
+          Get-ChildItem out -File | ForEach-Object {
+            $h = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$h  $($_.Name)"
+          } | Out-File -FilePath out/SHA256SUMS.txt -Encoding utf8
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Qing-PC-Windows
+          path: out/*
+          if-no-files-found: error
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          fail_on_unmatched_files: false

@@ -1,0 +1,118 @@
+{
+    "a11y": {
+        "seek_bar_label": "Panel vyhľadávania zvuku"
+    },
+    "action": {
+        "back": "Späť",
+        "cancel": "Zrušiť",
+        "click": "Vybrať",
+        "close": "Zavrieť",
+        "collapse": "Zbaliť",
+        "delete": "Vymazať",
+        "dismiss": "Zamietnuť",
+        "download": "Stiahnuť",
+        "edit": "Upraviť",
+        "explore_rooms": "Preskúmať miestnosti",
+        "go": "Prejsť",
+        "hide": "Skryť",
+        "invite": "Pozvať",
+        "new_conversation": "Nová",
+        "new_room": "Nová miestnosť",
+        "new_section": "Nová sekcia",
+        "new_video_room": "Nová video miestnosť",
+        "no": "Nie",
+        "open_menu": "Otvoriť ponuku",
+        "pause": "Pozastaviť",
+        "pin": "Pripnúť",
+        "play": "Prehrať",
+        "react": "Reagovať",
+        "remove": "Odstrániť",
+        "remove_this_device": "Odstrániť toto zariadenie",
+        "reply": "Odpovedať",
+        "reply_in_thread": "Odpovedať vo vlákne",
+        "retry": "Skúsiť znova",
+        "save": "Uložiť",
+        "search": "Hľadať",
+        "start_chat": "Začať konverzáciu",
+        "unpin": "Odopnúť",
+        "view_source": "Zobraziť zdroj",
+        "yes": "Áno"
+    },
+    "common": {
+        "attachment": "Príloha",
+        "preferences": "Predvoľby"
+    },
+    "left_panel": {
+        "open_dial_pad": "Otvoriť číselník"
+    },
+    "notifications": {
+        "all_messages": "Všetky správy"
+    },
+    "room": {
+        "context_menu": {
+            "title": "Možnosti miestnosti"
+        },
+        "status_bar": {
+            "delete_all": "Vymazať všetko",
+            "exceeded_resource_limit_description": "Ak chcete službu naďalej používať, kontaktujte svojho správcu služby.",
+            "exceeded_resource_limit_title": "Vaša správa nebola odoslaná, pretože tento domovský server prekročil limit zdrojov.",
+            "failed_to_create_room_title": "Nepodarilo sa začať konverzáciu s týmto používateľom",
+            "homeserver_blocked_title": "Vaša správa nebola odoslaná, pretože tento domovský server bol blokovaný jeho správcom.",
+            "monthly_user_limit_reached_title": "Vaša správa nebola odoslaná, pretože tento domovský server dosiahol svoj mesačný limit aktívnych používateľov.",
+            "requires_consent_agreement_title": "Nemôžete odosielať žiadne správy, kým si neprečítate a nesúhlasíte s našimi zmluvnými podmienkami.",
+            "retry_all": "Skúsiť všetko znova",
+            "select_messages_to_retry": "Môžete vybrať všetky alebo jednotlivé správy, ktoré chcete opakovane odoslať alebo vymazať",
+            "server_connectivity_lost_description": "Odoslané správy budú uložené, kým sa neobnoví pripojenie.",
+            "server_connectivity_lost_title": "Spojenie so serverom bolo prerušené.",
+            "some_messages_not_sent": "Niektoré vaše správy ešte neboli odoslané"
+        }
+    },
+    "room_list": {
+        "a11y": {
+            "default": "Otvoriť miestnosť %(roomName)s"
+        },
+        "appearance": "Vzhľad",
+        "empty": {
+            "no_chats": "Zatiaľ žiadne konverzácie",
+            "no_invites": "Nemáte žiadne neprečítané pozvánky",
+            "no_rooms": "Zatiaľ ešte nie ste v žiadnej miestnosti"
+        },
+        "open_space_menu": "Otvoriť ponuku priestoru",
+        "room_options": "Možnosti miestnosti",
+        "sort": "Zoradiť",
+        "sort_type": {
+            "activity": "Najnovšia aktivita",
+            "atoz": "A-Z"
+        },
+        "space_menu": {
+            "home": "Domov priestoru",
+            "space_settings": "Nastavenia priestoru"
+        }
+    },
+    "terms": {
+        "tac_button": "Prečítať zmluvné podmienky"
+    },
+    "time": {
+        "about_day_ago": "asi pred jedným dňom",
+        "about_hour_ago": "približne pred hodinou",
+        "about_minute_ago": "približne pred minútou",
+        "few_seconds_ago": "pred pár sekundami",
+        "in_about_day": "približne o deň",
+        "in_about_hour": "približne o hodinu",
+        "in_about_minute": "približne o minútu",
+        "in_few_seconds": "o pár sekúnd",
+        "in_n_days": "o %(num)s dní",
+        "in_n_hours": "o %(num)s hodín",
+        "in_n_minutes": "o %(num)s minút",
+        "n_days_ago": "pred %(num)s dňami",
+        "n_hours_ago": "pred %(num)s hodinami",
+        "n_minutes_ago": "pred %(num)s minútami"
+    },
+    "timeline": {
+        "m.audio": {
+            "audio_player": "Prehrávač zvuku",
+            "error_downloading_audio": "Chyba pri sťahovaní zvuku",
+            "unnamed_audio": "Nepomenovaný zvukový záznam"
+        }
+    }
+}

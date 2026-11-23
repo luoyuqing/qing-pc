@@ -1,0 +1,7 @@
+{
+    "appId": "chat.qingzhuli.pc",
+    "name": "qing-pc",
+    "productName": "Qing PC",
+    "description": "Qing PC · 清助理桌面端（基于 Element）",
+    "protocols": ["chat.qingzhuli.pc", "qing"]
+}
