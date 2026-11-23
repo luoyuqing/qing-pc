@@ -36,35 +36,52 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # nx 的 native task hasher 在 Windows 上会因非 UTF-8 字节直接崩溃，
+      # 这里显式按依赖顺序构建，绕过 nx。
+      - name: Build workspace packages
+        shell: bash
+        run: |
+          set -e
+          (cd packages/module-api && pnpm exec vite build)
+          (cd packages/shared-utils && pnpm exec vite build)
+          (cd packages/shared-components && pnpm exec vite build)
+
       - name: Build web app
-        run: pnpm --filter element-web exec nx build
+        shell: bash
+        run: |
+          set -e
+          cd apps/web
+          pnpm run rethemendex
+          pnpm exec webpack-cli --mode production
 
       - name: Pack webapp.asar
-        shell: pwsh
+        shell: bash
         run: |
-          Remove-Item -Recurse -Force apps/desktop/webapp -ErrorAction SilentlyContinue
-          Copy-Item -Recurse apps/web/webapp apps/desktop/webapp
-          Push-Location apps/desktop
+          set -e
+          rm -rf apps/desktop/webapp
+          cp -r apps/web/webapp apps/desktop/webapp
+          cd apps/desktop
           pnpm exec asar p webapp webapp.asar
-          Pop-Location
-          Get-ChildItem apps/desktop/webapp.asar | Format-List Name, Length
+          ls -lh webapp.asar
 
       - name: Build desktop main process
-        run: pnpm --filter element-desktop exec nx run-many -t build:ts build:res
+        shell: bash
+        run: |
+          set -e
+          cd apps/desktop
+          pnpm exec tsc
+          node scripts/copy-res.ts
 
       - name: Package Windows zip
-        shell: pwsh
+        shell: bash
         run: |
-          Push-Location apps/desktop
-          pnpm exec electron-builder --win zip --x64 --publish never
-          Pop-Location
-          New-Item -ItemType Directory -Force -Path out | Out-Null
-          Get-ChildItem apps/desktop/dist -Filter *.zip -Recurse | Copy-Item -Destination out
-          Get-ChildItem apps/desktop/dist -Filter *.exe -Recurse | Copy-Item -Destination out
-          Get-ChildItem out -File | ForEach-Object {
-            $h = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
-            "$h  $($_.Name)"
-          } | Out-File -FilePath out/SHA256SUMS.txt -Encoding utf8
+          set -e
+          cd apps/desktop
+          CSC_IDENTITY_AUTO_DISCOVERY=false pnpm exec electron-builder --win zip --x64 --publish never
+          mkdir -p ../../out
+          cp dist/*.zip ../../out/
+          cd ../../out
+          sha256sum *.zip | tee SHA256SUMS.txt
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
