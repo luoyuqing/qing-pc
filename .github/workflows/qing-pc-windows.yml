@@ -38,6 +38,12 @@ jobs:
           pnpm --version
 
       - name: Install dependencies
+        env:
+          # matrix-js-sdk 是 git 依赖，pnpm 会把它展开成
+          # node_modules/.pnpm/matrix-js-sdk@https+++codeload.github.com+... 的超长目录，
+          # Windows 上 cmd 进不去（The system cannot find the path specified），
+          # 缩短虚拟 store 目录名即可。
+          npm_config_virtual_store_dir_max_length: "60"
         run: pnpm install --frozen-lockfile
 
       # nx 的 native task hasher 在 Windows 上会因非 UTF-8 字节直接崩溃，
