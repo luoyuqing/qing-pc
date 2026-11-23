@@ -51,14 +51,18 @@ jobs:
         run: |
           set -e
           cd apps/web
+          # webpack 不做 clean，残留的旧 bundle 会被一起打进包里（体积翻倍），必须先清
+          rm -rf webapp
           pnpm run rethemendex
           pnpm exec webpack-cli --mode production
+          ls webapp/bundles
 
       - name: Pack webapp.asar
         shell: bash
         run: |
           set -e
           rm -rf apps/desktop/webapp
+          rm -f apps/desktop/webapp.asar
           cp -r apps/web/webapp apps/desktop/webapp
           cd apps/desktop
           pnpm exec asar p webapp webapp.asar
@@ -77,6 +81,8 @@ jobs:
         run: |
           set -e
           cd apps/desktop
+          # 清掉上一次的产物，确保 zip 里只有本次构建
+          rm -rf dist
           CSC_IDENTITY_AUTO_DISCOVERY=false pnpm exec electron-builder --win zip --x64 --publish never
           mkdir -p ../../out
           cp dist/*.zip ../../out/
