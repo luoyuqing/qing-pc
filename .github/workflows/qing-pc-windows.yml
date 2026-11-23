@@ -74,11 +74,17 @@ jobs:
         shell: bash
         run: |
           set -e
+          # Element Desktop 从 webapp.asar 根目录读 config.json，
+          # 缺失会直接报 "no default server specified" 并停在错误页。
+          cp apps/web/qing.config.json apps/web/webapp/config.json
           rm -rf apps/desktop/webapp
           rm -f apps/desktop/webapp.asar
           cp -r apps/web/webapp apps/desktop/webapp
           cd apps/desktop
           pnpm exec asar p webapp webapp.asar
+          pnpm exec asar list webapp.asar | grep -q "config.json" || { echo "config.json 未打入 webapp.asar"; exit 1; }
+          pnpm exec asar extract-file webapp.asar config.json
+          node -e "const c=require('./config.json');console.log('brand:',c.brand,'| homeserver:',c.default_server_config['m.homeserver'].base_url);require('fs').unlinkSync('config.json')"
           ls -lh webapp.asar
 
       - name: Build desktop main process
