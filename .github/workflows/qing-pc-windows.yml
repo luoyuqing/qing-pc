@@ -25,7 +25,8 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10
+          # 上游 lockfile 已迁到 pnpm 12 的双文档格式，pnpm 10 会报 broken lockfile
+          version: 12
 
       - name: Setup Node
         uses: actions/setup-node@v4
