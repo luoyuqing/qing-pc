@@ -52,9 +52,19 @@ async function request(path: string, init?: RequestInit): Promise<any> {
 
     let response: Response;
     try {
-        response = await fetch(`${baseUrl}${path}`, { ...init, headers });
+        // 必须有超时：device-hub 不可达时 TCP 可能长时间挂起，
+        // 没有 signal 的话页面会永远停在「加载中」。
+        response = await fetch(`${baseUrl}${path}`, {
+            ...init,
+            headers,
+            signal: AbortSignal.timeout(10000),
+        });
     } catch (e) {
-        throw new HubError(`无法连接 ${baseUrl}：${(e as Error).message}`);
+        const err = e as Error;
+        if (err.name === "TimeoutError" || err.name === "AbortError") {
+            throw new HubError(`${baseUrl} 响应超时（10 秒），检查地址与网络`);
+        }
+        throw new HubError(`无法连接 ${baseUrl}：${err.message}`);
     }
     if (!response.ok) {
         const body = await response.text().catch(() => "");
@@ -97,7 +107,58 @@ export const hub = {
 
     serviceTicket: (serviceId: string): Promise<any> =>
         request("/svc/ticket", { method: "POST", body: JSON.stringify({ service_id: serviceId }) }),
+
+    // ---- 服务器 ----
+    serverStatus: (): Promise<any> => request("/server/status"),
+    serverHistory: (range = "24h"): Promise<any> => request(`/server/history?range=${encodeURIComponent(range)}`),
+    serverServiceDetail: (key: string): Promise<any> => request(`/server/service?key=${encodeURIComponent(key)}`),
+
+    // ---- 用量 ----
+    usageSummary: (): Promise<any> => request("/usage/summary"),
+
+    // ---- 模型与推理 ----
+    agentModel: (persona?: string): Promise<any> =>
+        request(`/agent/model${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
+    agentCandidates: (persona?: string): Promise<any> =>
+        request(`/agent/candidates${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
+    agentFallback: (persona?: string): Promise<any> =>
+        request(`/agent/fallback${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
+    agentAuxiliary: (persona?: string): Promise<any> =>
+        request(`/agent/auxiliary${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
+    switchModel: (key: string, persona?: string): Promise<any> =>
+        request("/agent/model/switch", { method: "POST", body: JSON.stringify({ key, persona }) }),
+
+    // ---- 凭据 / 插件 ----
+    agentCredentials: (): Promise<any> => request("/agent/credentials"),
+    agentPlugins: (): Promise<any> => request("/agent/plugins"),
+
+    // ---- 记忆 ----
+    memory: (persona?: string): Promise<any> =>
+        request(`/memory${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
+    memoryVault: (persona?: string): Promise<any> =>
+        request(`/memory/vault${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
+    memoryVaultStatus: (): Promise<any> => request("/memory/vault/status"),
+
+    // ---- 人设 / 技能 ----
+    personas: (): Promise<any> => request("/personas"),
+    persona: (persona?: string): Promise<any> =>
+        request(`/persona${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
+    skills: (persona?: string): Promise<any> =>
+        request(`/skills${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
+
+    // ---- 连接器 / MCP ----
+    connectors: (): Promise<any> => request("/connectors"),
+    mcpServers: (): Promise<any> => request("/mcp/servers"),
+    mcpCall: (server: string, tool: string, args: any): Promise<any> =>
+        request("/mcp/call", { method: "POST", body: JSON.stringify({ server, tool, args }) }),
+
+    // ---- 设备 / 审计 / 诊断 ----
+    devices: (): Promise<any> => request("/query/devices"),
+    audit: (): Promise<any> => request("/audit"),
+    diagnose: (): Promise<any> => request("/diagnose"),
+    retention: (): Promise<any> => request("/admin/retention"),
 };
+
 
 /** 把接口返回的 items 安全地取成数组 */
 export function itemsOf(data: any): any[] {

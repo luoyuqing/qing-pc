@@ -7,7 +7,8 @@ export const PageHeader: React.FC<{
     title: string;
     subtitle?: string;
     right?: React.ReactNode;
-}> = ({ title, subtitle, right }) => {
+    onBack?: () => void;
+}> = ({ title, subtitle, right, onBack }) => {
     const p = palette();
     return (
         <div
@@ -19,6 +20,24 @@ export const PageHeader: React.FC<{
                 flexShrink: 0,
             }}
         >
+            {onBack && (
+                <button
+                    type="button"
+                    onClick={onBack}
+                    style={{
+                        border: "none",
+                        background: "transparent",
+                        color: p.textDim,
+                        cursor: "pointer",
+                        fontSize: 16,
+                        padding: "2px 4px",
+                        flexShrink: 0,
+                    }}
+                    title="返回"
+                >
+                    ←
+                </button>
+            )}
             <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontSize: 21, fontWeight: 600, color: p.text, lineHeight: 1.2 }}>{title}</div>
                 {subtitle && (

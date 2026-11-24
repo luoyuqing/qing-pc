@@ -1,6 +1,7 @@
 /*
 Qing PC · 主导航
-左侧竖排五项（聊天 / 简报 / 任务 / 服务 / 设置），与手机版底部导航一一对应。
+左侧竖排：聊天 / 归档 / 简报 / 任务 / 服务 / 设置。
+前五项对应手机版底部导航，归档按手机端语义单独成项（聊天列表 → 归档）。
 以浮层形式叠在 Element 原有三栏布局之上，不改动其 flex 结构：
 - 聊天：不遮挡，Element 原生界面
 - 其余：整块面板覆盖内容区，Element 组件保持挂载，切回时不丢状态
@@ -12,8 +13,9 @@ import { BriefingPage } from "./pages/BriefingPage";
 import { TasksPage } from "./pages/TasksPage";
 import { ServicesPage } from "./pages/ServicesPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { ArchivePage } from "./pages/ArchivePage";
 
-export type QingTab = "chat" | "briefing" | "tasks" | "services" | "settings";
+export type QingTab = "chat" | "archive" | "briefing" | "tasks" | "services" | "settings";
 
 interface IconProps {
     active: boolean;
@@ -22,6 +24,14 @@ interface IconProps {
 const ChatIcon: React.FC<IconProps> = ({ active }) => (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2 : 1.7}>
         <path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.4 9 9 0 0 1-3.8-.8L3 21l1.9-5.3a8.3 8.3 0 0 1-1-4A8.4 8.4 0 0 1 12.4 3 8.4 8.4 0 0 1 21 11.5Z" />
+    </svg>
+);
+
+const ArchiveIcon: React.FC<IconProps> = ({ active }) => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2 : 1.7}>
+        <rect x="3" y="4" width="18" height="4.5" rx="1.5" />
+        <path d="M4.8 8.5v9.2A2.3 2.3 0 0 0 7.1 20h9.8a2.3 2.3 0 0 0 2.3-2.3V8.5" />
+        <path d="M9.6 12.4h4.8" />
     </svg>
 );
 
@@ -57,6 +67,7 @@ const SettingsIcon: React.FC<IconProps> = ({ active }) => (
 
 const TABS: { id: QingTab; label: string; icon: React.FC<IconProps> }[] = [
     { id: "chat", label: "聊天", icon: ChatIcon },
+    { id: "archive", label: "归档", icon: ArchiveIcon },
     { id: "briefing", label: "简报", icon: BriefingIcon },
     { id: "tasks", label: "任务", icon: TasksIcon },
     { id: "services", label: "服务", icon: ServicesIcon },
@@ -135,10 +146,25 @@ export const QingShell: React.FC = () => {
                         color: p.text,
                     }}
                 >
+                    {tab === "archive" && (
+                        <ArchivePage
+                            onOpenRoom={(roomId) => {
+                                window.location.hash = `#/room/${encodeURIComponent(roomId)}`;
+                                setTab("chat");
+                            }}
+                        />
+                    )}
                     {tab === "briefing" && <BriefingPage />}
                     {tab === "tasks" && <TasksPage />}
                     {tab === "services" && <ServicesPage />}
-                    {tab === "settings" && <SettingsPage />}
+                    {tab === "settings" && (
+                        <SettingsPage
+                            onNavigateElement={() => {
+                                window.location.hash = "#/settings";
+                                setTab("chat");
+                            }}
+                        />
+                    )}
                 </div>
             )}
         </>
