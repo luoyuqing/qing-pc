@@ -1,11 +1,13 @@
 /* Qing PC · 模型与推理（当前模型 / 候选池 / 一键切换），对应 settings_agent/model_page.dart */
 
 import React, { useCallback, useEffect, useState } from "react";
-import { hub, loadConfig } from "../hub";
+import { hub, loadConfig, saveConfig } from "../hub";
+import { PersonaPicker } from "../PersonaPicker";
 import { Button, Card, ErrorBox, Loading, PageHeader, Scroll } from "../ui";
 import { palette } from "../theme";
 
 export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
+    const [persona, setPersona] = useState(loadConfig().persona);
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -17,22 +19,28 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
         setLoading(true);
         setError(null);
         try {
-            setData(await hub.agentModel(loadConfig().persona));
+            setData(await hub.agentModel(persona));
         } catch (e) {
             setError((e as Error).message);
         }
         setLoading(false);
-    }, []);
+    }, [persona]);
 
     useEffect(() => {
         void load();
     }, [load, tick]);
 
+    const changePersona = (id: string) => {
+        setPersona(id);
+        // 写回全局，其他页面沿用上次选择
+        saveConfig({ ...loadConfig(), persona: id });
+    };
+
     const swap = async (key: string) => {
         setBusy(key);
         setError(null);
         try {
-            await hub.switchModel(key, loadConfig().persona);
+            await hub.switchModel(key, persona);
             await new Promise((r) => setTimeout(r, 600));
             setTick((t) => t + 1);
         } catch (e) {
@@ -67,7 +75,12 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                 onBack={onBack}
                 title="模型与推理"
                 subtitle={data?.label ? `人设 ${data.label}（${data.persona}）` : undefined}
-                right={<Button onClick={() => setTick((t) => t + 1)}>刷新</Button>}
+                right={
+                    <>
+                        <PersonaPicker value={persona} onChange={changePersona} compact />
+                        <Button onClick={() => setTick((t) => t + 1)}>刷新</Button>
+                    </>
+                }
             />
             <Scroll>
                 {error && (

@@ -106,6 +106,52 @@ export const BriefingPage: React.FC = () => {
                 }
             />
 
+            <div
+                style={{
+                    display: "flex",
+                    gap: 8,
+                    padding: "0 24px 10px",
+                    flexShrink: 0,
+                    overflowX: "auto",
+                }}
+            >
+                {Array.from({ length: 7 }, (_, i) => {
+                    const d = new Date();
+                    d.setDate(d.getDate() - i);
+                    const mm = `${d.getMonth() + 1}`.padStart(2, "0");
+                    const dd = `${d.getDate()}`.padStart(2, "0");
+                    const key = `${d.getFullYear()}-${mm}-${dd}`;
+                    const label = i === 0 ? "今天" : i === 1 ? "昨天" : `周${"日一二三四五六"[d.getDay()]}`;
+                    const active = key === date;
+                    return (
+                        <button
+                            key={key}
+                            type="button"
+                            onClick={() => setDate(key)}
+                            style={{
+                                flex: "0 0 auto",
+                                width: 52,
+                                padding: "6px 0",
+                                borderRadius: 12,
+                                cursor: "pointer",
+                                border: `1px solid ${active ? "transparent" : p.border}`,
+                                background: active ? p.accent : p.bgAlt,
+                                color: active ? "#fff" : p.textDim,
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                gap: 2,
+                            }}
+                        >
+                            <span style={{ fontSize: 10.5 }}>{label}</span>
+                            <span style={{ fontSize: 15, fontWeight: 600, color: active ? "#fff" : p.text }}>
+                                {dd}
+                            </span>
+                        </button>
+                    );
+                })}
+            </div>
+
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 24px 12px", flexShrink: 0 }}>
                 <Pill label="晨报" active={kind === "morning"} onClick={() => setKind("morning")} />
                 <Pill label="晚报" active={kind === "evening"} onClick={() => setKind("evening")} />

@@ -40,8 +40,15 @@ export const ServicesPage: React.FC = () => {
         setError(null);
         try {
             const [catalog, favList] = await Promise.all([hub.serviceCatalog(), hub.serviceFavs()]);
+            // /svc/catalog 返回的是 {services:[...]}，不是 {items:[...]}；
+            // 之前用 itemsOf() 解析，拿到空数组，本机服务整组丢失。
+            const list: any[] = Array.isArray(catalog)
+                ? catalog
+                : Array.isArray(catalog?.services)
+                  ? catalog.services
+                  : itemsOf(catalog);
             setServices(
-                itemsOf(catalog).filter((item) => {
+                list.filter((item) => {
                     const host = `${item.hostname || ""}`;
                     return !host || isAllowedHost(host);
                 }),

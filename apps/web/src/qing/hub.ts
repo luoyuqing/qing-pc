@@ -172,16 +172,48 @@ export const hub = {
     // ---- 记忆 ----
     memory: (persona?: string): Promise<any> =>
         request(`/memory${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
+    saveMemory: (persona: string, kind: "memory" | "profile", content: string): Promise<any> =>
+        request("/memory", { method: "POST", body: JSON.stringify({ persona, kind, content }) }),
     memoryVault: (persona?: string): Promise<any> =>
         request(`/memory/vault${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
     memoryVaultStatus: (): Promise<any> => request("/memory/vault/status"),
 
-    // ---- 人设 / 技能 ----
+    // ---- 技能 ----
+    skills: (persona?: string): Promise<any> =>
+        request(`/skills${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
+    skillContent: (path: string, persona?: string): Promise<any> =>
+        request(
+            `/skills/${encodeURIComponent(path)}${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`,
+        ),
+    saveSkill: (path: string, persona: string, content: string): Promise<any> =>
+        request(`/skills/${encodeURIComponent(path)}`, {
+            method: "POST",
+            body: JSON.stringify({ persona, content }),
+        }),
+    deleteSkill: (path: string, persona: string): Promise<any> =>
+        request(`/skills/${encodeURIComponent(path)}?persona=${encodeURIComponent(persona)}`, {
+            method: "DELETE",
+        }),
+
+    // ---- 人设 ----
     personas: (): Promise<any> => request("/personas"),
     persona: (persona?: string): Promise<any> =>
         request(`/persona${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
-    skills: (persona?: string): Promise<any> =>
-        request(`/skills${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
+
+    // ---- 定时任务 ----
+    routines: (persona?: string): Promise<any> =>
+        request(`/routines${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
+    routine: (id: string, persona?: string): Promise<any> =>
+        request(`/routines/${encodeURIComponent(id)}${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
+    updateRoutine: (
+        id: string,
+        persona: string,
+        patch: { name?: string; prompt?: string; schedule?: string; enabled?: boolean },
+    ): Promise<any> =>
+        request(`/routines/${encodeURIComponent(id)}?persona=${encodeURIComponent(persona)}`, {
+            method: "PATCH",
+            body: JSON.stringify(patch),
+        }),
 
     // ---- 连接器 / MCP ----
     connectors: (): Promise<any> => request("/connectors"),

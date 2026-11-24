@@ -13,6 +13,7 @@ import { ListPage } from "./ListPage";
 import { ModelPage } from "./ModelPage";
 import { UsagePage } from "./UsagePage";
 import { ServerPage } from "./ServerPage";
+import { MemoryPage } from "./MemoryPage";
 import { isSpacePanelVisible, setSpacePanelVisible } from "../spacePanel";
 
 type Route =
@@ -352,27 +353,7 @@ export const SettingsPage: React.FC<{ onNavigateElement: () => void }> = ({ onNa
     if (route === "server") return <ServerPage onBack={back} />;
     if (route === "vault") return <VaultPage onBack={back} />;
 
-    if (route === "memory")
-        return (
-            <ListPage
-                title="记忆"
-                subtitle="人设画像与数据规模"
-                onBack={back}
-                loader={() => hub.memoryBundle(loadConfig().persona)}
-                columns={[
-                    { key: "label", title: true },
-                    { key: "id", label: "标识" },
-                    { key: "skill_count", label: "技能" },
-                    { key: "routine_count", label: "例程" },
-                    { key: "session_count", label: "会话" },
-                    {
-                        key: "memory_updated_at",
-                        label: "记忆更新",
-                        render: (x) => `${x.memory_updated_at ?? "—"}`.replace("T", " ").slice(0, 16),
-                    },
-                ]}
-            />
-        );
+    if (route === "memory") return <MemoryPage onBack={back} initialPersona={loadConfig().persona} />;
 
     if (route === "credentials")
         return (
