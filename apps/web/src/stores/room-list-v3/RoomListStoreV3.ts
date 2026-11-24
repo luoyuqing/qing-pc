@@ -33,7 +33,7 @@ import { MARKED_UNREAD_TYPE_STABLE, MARKED_UNREAD_TYPE_UNSTABLE } from "../../ut
 import { Action } from "../../dispatcher/actions";
 import { UnreadSorter } from "./skip-list/sorters/UnreadSorter";
 import { getChangedOverrideRoomMutePushRules } from "./utils";
-import { isRoomVisible } from "./isRoomVisible";
+import { isRoomArchived, isRoomVisible } from "./isRoomVisible";
 import { RoomSkipList } from "./skip-list/RoomSkipList";
 import { getTagsForRoom } from "../../utils/room/getTagsForRoom";
 import { SectionFilter } from "./skip-list/filters/SectionFilter";
@@ -525,10 +525,15 @@ export class RoomListStoreV3Class extends AsyncStoreWithClient<EmptyObject> {
 
                 return {
                     tag,
-                    rooms: Array.from(this.roomSkipList?.getRoomsInActiveSpace(filters) || []),
+                    // 已归档的会话要从列表里剔掉：房间 tag 变化只会触发 reInsertRoom，
+                    // 不会走 isRoomVisible 的拒绝分支，所以这里必须再挡一次。
+                    rooms: Array.from(this.roomSkipList?.getRoomsInActiveSpace(filters) || []).filter(
+                        (room) => !isRoomArchived(room),
+                    ),
                 };
             })
-            .filter((section) => !filterKeys || section.rooms.length > 0);
+            // 归档后变空的分区整块隐藏（否则「房间」标题下会空一片）
+            .filter((section) => section.rooms.length > 0);
     }
 
     /**

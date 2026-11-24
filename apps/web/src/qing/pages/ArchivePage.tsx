@@ -1,94 +1,95 @@
 /*
 Qing PC · 归档
-手机端的归档是「本机偏好」（qing.chat_list.archived_rooms，存 SharedPreferences），
-不写 Matrix tag、不跨设备同步。PC 端同样用本机存储，语义保持一致：
-只影响这台设备怎么显示，不会动服务器上的房间。
+归档 = 给房间打上 u.qing.archived tag：
+- 聊天列表里隐藏（见 stores/room-list-v3/isRoomVisible.ts 与 RoomListStoreV3.getSections）
+- 只在本页出现
+tag 存在服务端，换一台 PC 登录同一账号也能看到一致的归档结果。
+
+注：手机版 qing 的归档存在 SharedPreferences（本机），两端不互通，这是手机端原有设计。
 */
 
 import React, { useCallback, useEffect, useState } from "react";
 import { MatrixClientPeg } from "../../MatrixClientPeg";
+import { QING_ARCHIVE_TAG } from "../../stores/room-list-v3/isRoomVisible";
 import { Button, Card, Empty, PageHeader, Scroll } from "../ui";
 import { palette } from "../theme";
 
-const KEY = "qing.pc.archivedRooms";
-
-function readArchived(): string[] {
-    try {
-        const raw = window.localStorage.getItem(KEY);
-        const arr = raw ? JSON.parse(raw) : [];
-        return Array.isArray(arr) ? arr.filter((x) => typeof x === "string") : [];
-    } catch {
-        return [];
-    }
-}
-
-function writeArchived(ids: string[]): void {
-    window.localStorage.setItem(KEY, JSON.stringify(Array.from(new Set(ids))));
-}
+const ROOM_TAGS_EVENT = "Room.tags";
 
 interface RoomInfo {
     id: string;
     name: string;
-    avatarUrl?: string;
 }
 
 export const ArchivePage: React.FC<{ onOpenRoom: (roomId: string) => void }> = ({ onOpenRoom }) => {
-    const [archived, setArchived] = useState<string[]>(readArchived());
+    const [archived, setArchived] = useState<RoomInfo[]>([]);
     const [allRooms, setAllRooms] = useState<RoomInfo[]>([]);
     const [picking, setPicking] = useState(false);
     const [query, setQuery] = useState("");
+    const [busy, setBusy] = useState<string | null>(null);
     const p = palette();
 
-    const loadRooms = useCallback(() => {
-        let client: any;
+    const client = (() => {
         try {
-            client = MatrixClientPeg.safeGet();
+            return MatrixClientPeg.safeGet();
         } catch {
-            setAllRooms([]);
-            return;
+            return null;
         }
-        const rooms = (client.getRooms?.() || [])
-            .filter((r: any) => r?.getMyMembership?.() === "join")
-            .map((r: any) => ({
-                id: r.roomId,
-                name: r.name || r.roomId,
-                avatarUrl: r.getAvatarUrl?.(client.getHomeserverUrl(), 32, 32, "crop") || undefined,
-            }))
-            .sort((a: RoomInfo, b: RoomInfo) => a.name.localeCompare(b.name, "zh-Hans-CN"));
-        setAllRooms(rooms);
-    }, []);
+    })();
+
+    const refresh = useCallback(() => {
+        if (!client) return;
+        const rooms: any[] = client.getRooms?.() || [];
+        const joined = rooms.filter((r) => r?.getMyMembership?.() === "join");
+        const map = (r: any): RoomInfo => ({ id: r.roomId, name: r.name || r.roomId });
+
+        setArchived(joined.filter((r) => r?.tags?.[QING_ARCHIVE_TAG]).map(map));
+        setAllRooms(joined.map(map).sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN")));
+    }, [client]);
 
     useEffect(() => {
-        loadRooms();
-    }, [loadRooms]);
+        refresh();
+        if (!client) return;
+        // 打/撤 tag 会触发 Room.tags，列表随之刷新
+        client.on(ROOM_TAGS_EVENT as any, refresh);
+        return () => client.off(ROOM_TAGS_EVENT as any, refresh);
+    }, [client, refresh]);
 
-    const byId = new Map(allRooms.map((r) => [r.id, r]));
-    const archivedRooms = archived.map((id) => byId.get(id) || { id, name: id });
-
-    const add = (id: string) => {
-        const next = [...archived, id];
-        setArchived(next);
-        writeArchived(next);
+    const archive = async (roomId: string) => {
+        if (!client) return;
+        setBusy(roomId);
+        try {
+            await client.setRoomTag(roomId, QING_ARCHIVE_TAG, { order: 0.5 });
+            refresh();
+        } catch (e) {
+            window.alert(`归档失败：${(e as Error).message}`);
+        }
+        setBusy(null);
     };
 
-    const remove = (id: string) => {
-        const next = archived.filter((x) => x !== id);
-        setArchived(next);
-        writeArchived(next);
+    const unarchive = async (roomId: string) => {
+        if (!client) return;
+        setBusy(roomId);
+        try {
+            await client.deleteRoomTag(roomId, QING_ARCHIVE_TAG);
+            refresh();
+        } catch (e) {
+            window.alert(`取消归档失败：${(e as Error).message}`);
+        }
+        setBusy(null);
     };
 
+    const archivedIds = new Set(archived.map((r) => r.id));
     const candidates = allRooms.filter(
-        (r) => !archived.includes(r.id) && (!query || r.name.toLowerCase().includes(query.toLowerCase())),
+        (r) => !archivedIds.has(r.id) && (!query || r.name.toLowerCase().includes(query.toLowerCase())),
     );
 
     return (
         <>
             <PageHeader
                 title="归档"
-                subtitle={`已归档 ${archived.length} 个会话 · 仅本机生效`}
-                right={
-                    <Button onClick={() => setPicking((v) => !v)}>{picking ? "完成" : "添加归档"}</Button>
-                }
+                subtitle={`已归档 ${archived.length} 个会话 · 已从聊天列表隐藏`}
+                right={<Button onClick={() => setPicking((v) => !v)}>{picking ? "完成" : "归档会话"}</Button>}
             />
 
             {picking && (
@@ -96,7 +97,7 @@ export const ArchivePage: React.FC<{ onOpenRoom: (roomId: string) => void }> = (
                     <input
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
-                        placeholder="搜索会话…"
+                        placeholder="搜索要归档的会话…"
                         style={{
                             width: "100%",
                             boxSizing: "border-box",
@@ -116,23 +117,30 @@ export const ArchivePage: React.FC<{ onOpenRoom: (roomId: string) => void }> = (
                 {picking ? (
                     <>
                         <div style={{ fontSize: 12, color: p.textDim, marginBottom: 8 }}>
-                            点一下加入归档（共 {candidates.length} 个可选）
+                            点一下即归档，并立即从聊天列表消失（{candidates.length} 个可选）
                         </div>
                         {candidates.slice(0, 200).map((r) => (
                             <Card
                                 key={r.id}
-                                onClick={() => add(r.id)}
-                                style={{ marginBottom: 6, padding: "10px 14px" }}
+                                onClick={busy ? undefined : () => void archive(r.id)}
+                                style={{ marginBottom: 6, padding: "10px 14px", opacity: busy === r.id ? 0.5 : 1 }}
                             >
-                                <div style={{ fontSize: 13.5, color: p.text }}>{r.name}</div>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                    <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: p.text }}>
+                                        {r.name}
+                                    </div>
+                                    <span style={{ fontSize: 11.5, color: p.textDim }}>
+                                        {busy === r.id ? "归档中…" : "归档"}
+                                    </span>
+                                </div>
                             </Card>
                         ))}
-                        {candidates.length === 0 && <Empty text="没有可添加的会话。" />}
+                        {candidates.length === 0 && <Empty text="没有可归档的会话。" />}
                     </>
-                ) : archivedRooms.length === 0 ? (
-                    <Empty text="还没有归档的会话。点右上角「添加归档」把不常看的会话收起来。" />
+                ) : archived.length === 0 ? (
+                    <Empty text="还没有归档的会话。点右上角「归档会话」把不常看的会话收起来，它们会从聊天列表消失。" />
                 ) : (
-                    archivedRooms.map((r) => (
+                    archived.map((r) => (
                         <Card key={r.id} style={{ marginBottom: 8 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                 <div
@@ -142,7 +150,9 @@ export const ArchivePage: React.FC<{ onOpenRoom: (roomId: string) => void }> = (
                                     <div style={{ fontSize: 13.5, color: p.text, fontWeight: 500 }}>{r.name}</div>
                                     <div style={{ fontSize: 11.5, color: p.textDim, marginTop: 2 }}>点击打开</div>
                                 </div>
-                                <Button onClick={() => remove(r.id)}>移出</Button>
+                                <Button disabled={busy === r.id} onClick={() => void unarchive(r.id)}>
+                                    {busy === r.id ? "…" : "取消归档"}
+                                </Button>
                             </div>
                         </Card>
                     ))

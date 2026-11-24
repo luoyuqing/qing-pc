@@ -4,7 +4,7 @@ Qing PC · 设置
 助理与服务器相关页面直接读 device-hub；应用类跳到 Element 原生设置（不重复实现）。
 */
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { DEFAULT_BASE_URL, hub, loadConfig, saveConfig } from "../hub";
 import { DataView } from "../DataView";
 import { Button, Card, PageHeader, Scroll } from "../ui";
@@ -94,7 +94,30 @@ const HubForm: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const [persona, setPersona] = useState(initial.persona);
     const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
     const [testing, setTesting] = useState(false);
+    const [personas, setPersonas] = useState<{ id: string; label: string }[]>([]);
+    const [personaLoading, setPersonaLoading] = useState(true);
     const p = palette();
+
+    // 人设列表来自服务端；拿不到就退回手填，不让用户卡住
+    const fetchPersonas = useCallback(async () => {
+        setPersonaLoading(true);
+        try {
+            const data = await hub.personas();
+            const raw = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+            setPersonas(
+                raw
+                    .map((x: any) => ({ id: `${x?.id ?? ""}`, label: `${x?.label || x?.id || ""}` }))
+                    .filter((x: { id: string }) => x.id),
+            );
+        } catch {
+            setPersonas([]);
+        }
+        setPersonaLoading(false);
+    }, []);
+
+    useEffect(() => {
+        void fetchPersonas();
+    }, [fetchPersonas]);
 
     const field = (
         label: string,
@@ -132,6 +155,8 @@ const HubForm: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         try {
             const h = await hub.health();
             setStatus({ ok: true, text: `连接成功（device-hub ${h?.version ?? "ok"}）` });
+            // 地址/令牌可能刚改过，连上后重新拉一次人设列表
+            void fetchPersonas();
         } catch (e) {
             setStatus({ ok: false, text: `连接失败：${(e as Error).message}` });
         }
@@ -145,7 +170,67 @@ const HubForm: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 <div style={{ maxWidth: 560 }}>
                     {field("服务地址", baseUrl, setBaseUrl, DEFAULT_BASE_URL)}
                     {field("访问令牌", token, setToken, "配对时下发的 Bearer token", true)}
-                    {field("人设", persona, setPersona, "default")}
+
+                    <div style={{ marginBottom: 16 }}>
+                        <div style={{ fontSize: 12, color: p.textDim, marginBottom: 5 }}>人设</div>
+                        {personas.length > 0 ? (
+                            <select
+                                value={persona}
+                                onChange={(e) => setPersona(e.target.value)}
+                                style={{
+                                    width: "100%",
+                                    boxSizing: "border-box",
+                                    padding: "9px 12px",
+                                    fontSize: 13.5,
+                                    borderRadius: 8,
+                                    outline: "none",
+                                    border: `1px solid ${p.border}`,
+                                    background: p.bgAlt,
+                                    color: p.text,
+                                    cursor: "pointer",
+                                }}
+                            >
+                                {!personas.some((x) => x.id === persona) && (
+                                    <option value={persona}>{persona}（当前值，已不在服务端列表）</option>
+                                )}
+                                {personas.map((x) => (
+                                    <option key={x.id} value={x.id}>
+                                        {x.label === x.id ? x.label : `${x.label}（${x.id}）`}
+                                    </option>
+                                ))}
+                            </select>
+                        ) : (
+                            <>
+                                <input
+                                    type="text"
+                                    value={persona}
+                                    placeholder="default"
+                                    onChange={(e) => setPersona(e.target.value)}
+                                    style={{
+                                        width: "100%",
+                                        boxSizing: "border-box",
+                                        padding: "9px 12px",
+                                        fontSize: 13.5,
+                                        borderRadius: 8,
+                                        outline: "none",
+                                        border: `1px solid ${p.border}`,
+                                        background: p.bgAlt,
+                                        color: p.text,
+                                    }}
+                                />
+                                <div style={{ fontSize: 11.5, color: p.textDim, marginTop: 5 }}>
+                                    {personaLoading
+                                        ? "正在读取人设列表…"
+                                        : "读不到人设列表，只能手填。先填上面的地址和令牌，点「保存并测试」成功后会变成下拉。"}
+                                </div>
+                            </>
+                        )}
+                        <div style={{ fontSize: 11.5, color: p.textDim, marginTop: 6, lineHeight: 1.6 }}>
+                            决定读哪一套助理的数据：记忆、技能、例程、会话与模型配置都按人设隔离。
+                            切换后回各页点「刷新」即可看到对应数据。
+                        </div>
+                    </div>
+
                     <div style={{ display: "flex", gap: 10 }}>
                         <Button variant="primary" disabled={testing} onClick={() => void test()}>
                             {testing ? "测试中…" : "保存并测试"}
