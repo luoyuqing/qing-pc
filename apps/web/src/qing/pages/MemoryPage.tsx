@@ -83,6 +83,8 @@ export const MemoryPage: React.FC<{ onBack?: () => void; initialPersona?: string
     const [skillOpen, setSkillOpen] = useState<string | null>(null);
     const [skillText, setSkillText] = useState("");
     const [personaData, setPersonaData] = useState<any>(null);
+    const [personaKey, setPersonaKey] = useState<string | null>(null);
+    const [personaText, setPersonaText] = useState("");
 
     const p = palette();
 
@@ -149,6 +151,21 @@ export const MemoryPage: React.FC<{ onBack?: () => void; initialPersona?: string
             setSavedMsg("技能已保存");
             setTimeout(() => setSavedMsg(null), 3000);
             await load();
+        } catch (e) {
+            window.alert(`保存失败：${(e as Error).message}`);
+        }
+        setSaving(false);
+    };
+
+    const savePersonaItem = async () => {
+        if (!personaKey) return;
+        setSaving(true);
+        try {
+            await hub.savePersona(persona, personaKey, personaText);
+            setSavedMsg("人设设定已保存");
+            setTimeout(() => setSavedMsg(null), 3000);
+            const pd = await hub.persona(persona).catch(() => null);
+            setPersonaData(pd);
         } catch (e) {
             window.alert(`保存失败：${(e as Error).message}`);
         }
@@ -305,13 +322,101 @@ export const MemoryPage: React.FC<{ onBack?: () => void; initialPersona?: string
 
                 {tab === "persona" && (
                     <>
-                        <div style={{ fontSize: 12, color: p.textDim, marginBottom: 10, lineHeight: 1.6 }}>
-                            当前人设「{persona}」的设定（来自 Hermes 的 config.yaml）。只读展示，改动请到服务端配置。
-                        </div>
-                        {personaData ? (
-                            <DataView data={personaData} />
+                        {personaKey ? (
+                            <>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                                    <Button onClick={() => setPersonaKey(null)}>← 返回列表</Button>
+                                    <span style={{ fontSize: 12.5, color: p.textDim }}>{personaKey}</span>
+                                </div>
+                                <textarea
+                                    value={personaText}
+                                    onChange={(e) => setPersonaText(e.target.value)}
+                                    spellCheck={false}
+                                    style={{
+                                        width: "100%",
+                                        boxSizing: "border-box",
+                                        minHeight: 420,
+                                        padding: 12,
+                                        fontSize: 13,
+                                        lineHeight: 1.7,
+                                        fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                                        borderRadius: 10,
+                                        border: `1px solid ${p.border}`,
+                                        background: p.bgAlt,
+                                        color: p.text,
+                                        outline: "none",
+                                        resize: "vertical",
+                                    }}
+                                />
+                                <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 10 }}>
+                                    <Button variant="primary" disabled={saving} onClick={() => void savePersonaItem()}>
+                                        {saving ? "保存中…" : "保存设定"}
+                                    </Button>
+                                    {savedMsg && <span style={{ fontSize: 12, color: p.accent }}>{savedMsg}</span>}
+                                </div>
+                            </>
                         ) : (
-                            <Empty text="没读到人设设定。" />
+                            <>
+                                <div style={{ fontSize: 12, color: p.textDim, marginBottom: 10, lineHeight: 1.6 }}>
+                                    「{personaData?.label || persona}」的设定（Hermes config.yaml）。点开可改，
+                                    改动写回服务端配置。
+                                </div>
+                                {(personaData?.items || []).length === 0 ? (
+                                    <Empty text="没读到人设设定。" />
+                                ) : (
+                                    (personaData?.items || []).map((it: any) => (
+                                        <Card key={it.key} style={{ marginBottom: 8 }}>
+                                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                                <div
+                                                    onClick={() => {
+                                                        setPersonaKey(it.key);
+                                                        setPersonaText(it.content || "");
+                                                    }}
+                                                    style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
+                                                >
+                                                    <div style={{ fontSize: 13.5, fontWeight: 500, color: p.text }}>
+                                                        {it.label || it.key}
+                                                        {it.primary && (
+                                                            <span
+                                                                style={{
+                                                                    marginLeft: 8,
+                                                                    fontSize: 10,
+                                                                    padding: "1px 6px",
+                                                                    borderRadius: 4,
+                                                                    background: p.accentSoft,
+                                                                    color: p.accent,
+                                                                }}
+                                                            >
+                                                                主设定
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div
+                                                        style={{
+                                                            fontSize: 11.5,
+                                                            color: p.textDim,
+                                                            marginTop: 4,
+                                                            lineHeight: 1.5,
+                                                            maxHeight: 40,
+                                                            overflow: "hidden",
+                                                        }}
+                                                    >
+                                                        {`${it.content || ""}`.slice(0, 120)}
+                                                    </div>
+                                                </div>
+                                                <Button
+                                                    onClick={() => {
+                                                        setPersonaKey(it.key);
+                                                        setPersonaText(it.content || "");
+                                                    }}
+                                                >
+                                                    编辑
+                                                </Button>
+                                            </div>
+                                        </Card>
+                                    ))
+                                )}
+                            </>
                         )}
                     </>
                 )}

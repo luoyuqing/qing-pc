@@ -14,6 +14,8 @@ import { ModelPage } from "./ModelPage";
 import { UsagePage } from "./UsagePage";
 import { ServerPage } from "./ServerPage";
 import { MemoryPage } from "./MemoryPage";
+import { McpPage } from "./McpPage";
+import { PrivacyPage } from "./PrivacyPage";
 import { isSpacePanelVisible, setSpacePanelVisible } from "../spacePanel";
 
 type Route =
@@ -32,7 +34,8 @@ type Route =
     | "audit"
     | "vault"
     | "devices"
-    | "hub";
+    | "hub"
+    | "privacy";
 
 interface MenuItem {
     route?: Route;
@@ -78,6 +81,7 @@ const GROUPS: { title: string; items: MenuItem[] }[] = [
         items: [
             { route: "hub", label: "设备数据", desc: "device-hub 地址与配对令牌" },
             { route: "devices", label: "已配对设备", desc: "令牌、权限与最近活跃" },
+            { route: "privacy", label: "数据与隐私", desc: "通知与位置的保留天数" },
         ],
     },
     {
@@ -352,6 +356,7 @@ export const SettingsPage: React.FC<{ onNavigateElement: () => void }> = ({ onNa
     if (route === "usage") return <UsagePage onBack={back} />;
     if (route === "server") return <ServerPage onBack={back} />;
     if (route === "vault") return <VaultPage onBack={back} />;
+    if (route === "privacy") return <PrivacyPage onBack={back} />;
 
     if (route === "memory") return <MemoryPage onBack={back} initialPersona={loadConfig().persona} />;
 
@@ -388,21 +393,7 @@ export const SettingsPage: React.FC<{ onNavigateElement: () => void }> = ({ onNa
             />
         );
 
-    if (route === "mcp")
-        return (
-            <ListPage
-                title="连接应用"
-                subtitle="MCP 服务（凭据留在 X2，不上手机）"
-                onBack={back}
-                loader={() => hub.mcpServers()}
-                columns={[
-                    { key: "name", title: true },
-                    { key: "url", label: "地址" },
-                    { key: "tools", label: "工具数", render: (x) => (Array.isArray(x.tools) ? x.tools.length : "—") },
-                    { key: "last_error", label: "最近错误" },
-                ]}
-            />
-        );
+    if (route === "mcp") return <McpPage onBack={back} />;
 
     if (route === "connectors")
         return (

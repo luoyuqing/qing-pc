@@ -199,6 +199,8 @@ export const hub = {
     personas: (): Promise<any> => request("/personas"),
     persona: (persona?: string): Promise<any> =>
         request(`/persona${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
+    savePersona: (persona: string, key: string, content: string): Promise<any> =>
+        request("/persona", { method: "POST", body: JSON.stringify({ persona, key, content }) }),
 
     // ---- 定时任务 ----
     routines: (persona?: string): Promise<any> =>
@@ -217,15 +219,27 @@ export const hub = {
 
     // ---- 连接器 / MCP ----
     connectors: (): Promise<any> => request("/connectors"),
+    saveConnector: (name: string, config: any): Promise<any> =>
+        request("/connectors", { method: "POST", body: JSON.stringify({ name, config }) }),
     mcpServers: (): Promise<any> => request("/mcp/servers"),
+    addMcpServer: (name: string, url: string, token?: string): Promise<any> =>
+        request("/mcp/servers", { method: "POST", body: JSON.stringify({ name, url, token }) }),
+    deleteMcpServer: (id: number): Promise<any> => request(`/mcp/servers/${id}`, { method: "DELETE" }),
     mcpCall: (server: string, tool: string, args: any): Promise<any> =>
         request("/mcp/call", { method: "POST", body: JSON.stringify({ server, tool, args }) }),
+
+    // ---- 数据与隐私 ----
+    retention: (): Promise<any> => request("/admin/retention"),
+    setRetention: (notifyDays: number, locationDays: number): Promise<any> =>
+        request("/admin/retention", {
+            method: "POST",
+            body: JSON.stringify({ notify_days: notifyDays, location_days: locationDays }),
+        }),
 
     // ---- 设备 / 审计 / 诊断 ----
     devices: (): Promise<any> => request("/query/devices"),
     audit: (): Promise<any> => request("/audit"),
     diagnose: (): Promise<any> => request("/diagnose"),
-    retention: (): Promise<any> => request("/admin/retention"),
 };
 
 
