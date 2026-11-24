@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Com
 Please see LICENSE files in the repository root for full details.
 */
 
-import { app, autoUpdater, desktopCapturer, ipcMain, net, powerSaveBlocker, TouchBar, nativeImage, session } from "electron";
+import { app, autoUpdater, BrowserWindow, desktopCapturer, ipcMain, net, powerSaveBlocker, TouchBar, nativeImage, session } from "electron";
 
 import IpcMainEvent = Electron.IpcMainEvent;
 import { randomArray } from "./utils.js";
@@ -283,6 +283,60 @@ ipcMain.handle(
         return { ok: res.ok, status: res.status, body };
     },
 );
+
+/**
+ * 清助理 · 本机服务打开
+ *
+ * 服务端（/__gate）的规则是：一次性票据换一次 302，接着种会话 cookie，裸访问一律 403。
+ * 手机端用内置 WebView 打开，票据不会落到浏览器地址栏和历史里。
+ *
+ * 早期 PC 版直接 window.open 交给系统浏览器，会把 __gate?t=... 暴露在地址栏，
+ * 而且那份会话 cookie 会长期留在系统浏览器里 —— 等于在客户端之外多开了一条入口。
+ * 这里改成用独立的非持久 partition 开内置窗口，退出即清，与手机端行为一致。
+ */
+ipcMain.handle("qingOpenService", async (_ev, rawUrl: string): Promise<boolean> => {
+    let u: URL;
+    try {
+        u = new URL(rawUrl);
+    } catch {
+        throw new Error("入口地址无效");
+    }
+    if (u.protocol !== "https:") throw new Error("只允许 https 入口");
+    const host = u.hostname.toLowerCase();
+    if (!(host === "3585616.xyz" || host.endsWith(".3585616.xyz"))) {
+        throw new Error(`域名不在白名单内：${host}`);
+    }
+
+    const win = new BrowserWindow({
+        width: 1100,
+        height: 820,
+        title: "服务",
+        autoHideMenuBar: true,
+        backgroundColor: "#fff",
+        webPreferences: {
+            // 不带 persist: 前缀 → 内存会话，窗口关掉 cookie 即失效
+            partition: "qing-services",
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true,
+        },
+    });
+    // 站内跳转留在窗口内；跳到外部域名直接阻止，避免变成万能浏览器
+    win.webContents.setWindowOpenHandler(({ url }) => {
+        try {
+            const target = new URL(url);
+            const h = target.hostname.toLowerCase();
+            if (target.protocol === "https:" && (h === "3585616.xyz" || h.endsWith(".3585616.xyz"))) {
+                void win.loadURL(url);
+            }
+        } catch {
+            /* 忽略非法地址 */
+        }
+        return { action: "deny" };
+    });
+    void win.loadURL(rawUrl);
+    return true;
+});
 
 const initialisePromiseWithResolvers = Promise.withResolvers<void>();
 export const initialisePromise = initialisePromiseWithResolvers.promise;

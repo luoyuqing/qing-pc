@@ -95,3 +95,6 @@ contextBridge.exposeInMainWorld("qingHub", {
     request: (req: { url: string; method?: string; headers?: Record<string, string>; body?: string }) =>
         ipcRenderer.invoke("qingHubRequest", req),
 });
+
+// 清助理 · 本机服务：用内置窗口打开一次性票据入口，不走系统浏览器
+contextBridge.exposeInMainWorld("qingOpenService", (url: string) => ipcRenderer.invoke("qingOpenService", url));

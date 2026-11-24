@@ -17,6 +17,21 @@ function isAllowedHost(host: string): boolean {
     return h === ALLOWED_HOST || h.endsWith(`.${ALLOWED_HOST}`);
 }
 
+/**
+ * 本机服务：交给内置窗口（主进程开），票据 URL 不进系统浏览器的地址栏和历史。
+ * 手机端同样是用内置 WebView 打开的，这里保持一致。
+ */
+function openServiceWindow(url: string): void {
+    const bridge = (window as unknown as { qingOpenService?: (u: string) => Promise<boolean> }).qingOpenService;
+    if (typeof bridge === "function") {
+        void bridge(url).catch((e: Error) => window.alert(`打开失败：${e.message}`));
+        return;
+    }
+    // 只有在没有主进程能力（例如浏览器里调试）时才退回系统浏览器
+    window.open(url, "_blank", "noopener,noreferrer");
+}
+
+/** 外网收藏本身就是公网页面，交给系统浏览器即可 */
 function openExternal(url: string): void {
     window.open(url, "_blank", "noopener,noreferrer");
 }
@@ -75,7 +90,7 @@ export const ServicesPage: React.FC = () => {
             if (parsed.protocol !== "https:" || !isAllowedHost(parsed.hostname)) {
                 throw new Error("服务端返回的入口地址不在白名单内");
             }
-            openExternal(url);
+            openServiceWindow(url);
         } catch (e) {
             setError((e as Error).message);
         }
