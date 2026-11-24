@@ -103,11 +103,13 @@ const HubForm: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const [testing, setTesting] = useState(false);
     const [personas, setPersonas] = useState<{ id: string; label: string }[]>([]);
     const [personaLoading, setPersonaLoading] = useState(true);
+    const [personaErr, setPersonaErr] = useState<string | null>(null);
     const p = palette();
 
     // 人设列表来自服务端；拿不到就退回手填，不让用户卡住
     const fetchPersonas = useCallback(async () => {
         setPersonaLoading(true);
+        setPersonaErr(null);
         try {
             const data = await hub.personas();
             const raw = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
@@ -116,8 +118,9 @@ const HubForm: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     .map((x: any) => ({ id: `${x?.id ?? ""}`, label: `${x?.label || x?.id || ""}` }))
                     .filter((x: { id: string }) => x.id),
             );
-        } catch {
+        } catch (e) {
             setPersonas([]);
+            setPersonaErr((e as Error).message);
         }
         setPersonaLoading(false);
     }, []);
@@ -161,11 +164,21 @@ const HubForm: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         saveConfig({ baseUrl, token, persona });
         try {
             const h = await hub.health();
-            setStatus({ ok: true, text: `连接成功（device-hub ${h?.version ?? "ok"}）` });
-            // 地址/令牌可能刚改过，连上后重新拉一次人设列表
+            // /health 不校验令牌，令牌错了也会返回 200，所以必须再打一个需要鉴权的接口，
+            // 否则会出现「连接成功」但各页全 401 的假象。
+            await hub.personas();
+            setStatus({ ok: true, text: `连接成功（device-hub ${h?.version ?? "ok"}，令牌有效）` });
             void fetchPersonas();
         } catch (e) {
-            setStatus({ ok: false, text: `连接失败：${(e as Error).message}` });
+            const msg = (e as Error).message;
+            if (/HTTP 401/.test(msg)) {
+                setStatus({
+                    ok: false,
+                    text: "地址通了，但令牌无效（HTTP 401）。令牌是 48 位十六进制字符串，不是 6 位配对码。请重新获取后填入。",
+                });
+            } else {
+                setStatus({ ok: false, text: `连接失败：${msg}` });
+            }
         }
         setTesting(false);
     };
@@ -228,7 +241,9 @@ const HubForm: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                 <div style={{ fontSize: 11.5, color: p.textDim, marginTop: 5 }}>
                                     {personaLoading
                                         ? "正在读取人设列表…"
-                                        : "读不到人设列表，只能手填。先填上面的地址和令牌，点「保存并测试」成功后会变成下拉。"}
+                                        : personaErr
+                                          ? `读不到人设列表：${personaErr}。填对令牌后点「保存并测试」会变成下拉。`
+                                          : "读不到人设列表，只能手填。先填上面的地址和令牌，点「保存并测试」成功后会变成下拉。"}
                                 </div>
                             </>
                         )}
