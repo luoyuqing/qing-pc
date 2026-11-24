@@ -89,3 +89,9 @@ contextBridge.exposeInMainWorld("electron", {
             ipcRenderer.invoke("x509", "signData", serialNumber, data),
     } satisfies X509Api,
 });
+
+// 清助理 · device-hub 请求代理（主进程代发，绕过渲染进程的跨域限制）
+contextBridge.exposeInMainWorld("qingHub", {
+    request: (req: { url: string; method?: string; headers?: Record<string, string>; body?: string }) =>
+        ipcRenderer.invoke("qingHubRequest", req),
+});

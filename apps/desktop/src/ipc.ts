@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Com
 Please see LICENSE files in the repository root for full details.
 */
 
-import { app, autoUpdater, desktopCapturer, ipcMain, powerSaveBlocker, TouchBar, nativeImage, session } from "electron";
+import { app, autoUpdater, desktopCapturer, ipcMain, net, powerSaveBlocker, TouchBar, nativeImage, session } from "electron";
 
 import IpcMainEvent = Electron.IpcMainEvent;
 import { randomArray } from "./utils.js";
@@ -245,6 +245,44 @@ ipcMain.on("ipcCall", async function (_ev: IpcMainEvent, payload) {
 });
 
 ipcMain.handle("getConfig", getConfig);
+
+/**
+ * 清助理 · device-hub 请求代理
+ *
+ * 渲染进程跑在 vector://vector 源下，直接 fetch 公网 device-hub 属于跨域请求；
+ * device-hub 目前不返回 CORS 头（预检 OPTIONS 返回 501），浏览器会直接拒绝，
+ * 表现为 "Failed to fetch"。主进程不受同源策略约束，这里代为转发。
+ *
+ * 顺带的好处：请求走 Chromium 网络栈（net.fetch），会自动使用系统代理设置。
+ */
+ipcMain.handle(
+    "qingHubRequest",
+    async (
+        _ev,
+        req: { url: string; method?: string; headers?: Record<string, string>; body?: string; timeoutMs?: number },
+    ): Promise<{ ok: boolean; status: number; body: string }> => {
+        let parsed: URL;
+        try {
+            parsed = new URL(req.url);
+        } catch {
+            throw new Error(`地址无效：${req.url}`);
+        }
+        // 只允许 http/https，杜绝 file:// 之类的本地读取
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+            throw new Error(`不支持的协议：${parsed.protocol}`);
+        }
+
+        const timeoutMs = Math.min(Math.max(req.timeoutMs ?? 10000, 1000), 60000);
+        const res = await net.fetch(req.url, {
+            method: req.method ?? "GET",
+            headers: req.headers,
+            body: req.body,
+            signal: AbortSignal.timeout(timeoutMs),
+        });
+        const body = await res.text();
+        return { ok: res.ok, status: res.status, body };
+    },
+);
 
 const initialisePromiseWithResolvers = Promise.withResolvers<void>();
 export const initialisePromise = initialisePromiseWithResolvers.promise;

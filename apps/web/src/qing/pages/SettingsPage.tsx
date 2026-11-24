@@ -13,6 +13,7 @@ import { ListPage } from "./ListPage";
 import { ModelPage } from "./ModelPage";
 import { UsagePage } from "./UsagePage";
 import { ServerPage } from "./ServerPage";
+import { isSpacePanelVisible, setSpacePanelVisible } from "../spacePanel";
 
 type Route =
     | "root"
@@ -38,6 +39,8 @@ interface MenuItem {
     desc: string;
     /** 跳到 Element 原生设置 */
     element?: boolean;
+    /** 就地开关，不进子页 */
+    toggle?: "spacePanel";
 }
 
 const GROUPS: { title: string; items: MenuItem[] }[] = [
@@ -75,6 +78,10 @@ const GROUPS: { title: string; items: MenuItem[] }[] = [
             { route: "hub", label: "设备数据", desc: "device-hub 地址与配对令牌" },
             { route: "devices", label: "已配对设备", desc: "令牌、权限与最近活跃" },
         ],
+    },
+    {
+        title: "界面",
+        items: [{ toggle: "spacePanel", label: "Element 空间栏", desc: "默认收起，避免和左侧导航重复占位" }],
     },
     {
         title: "应用（Element 原生）",
@@ -320,6 +327,7 @@ const VaultPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
 export const SettingsPage: React.FC<{ onNavigateElement: () => void }> = ({ onNavigateElement }) => {
     const [route, setRoute] = useState<Route>("root");
+    const [spacePanelOn, setSpacePanelOn] = useState(isSpacePanelVisible());
     const p = palette();
     const back = () => setRoute("root");
 
@@ -521,28 +529,50 @@ export const SettingsPage: React.FC<{ onNavigateElement: () => void }> = ({ onNa
                 {GROUPS.map((group) => (
                     <div key={group.title} style={{ marginBottom: 20 }}>
                         <div style={{ fontSize: 12, color: p.textDim, marginBottom: 8 }}>{group.title}</div>
-                        {group.items.map((item) => (
-                            <Card
-                                key={item.label}
-                                onClick={() => {
-                                    if (item.element) onNavigateElement();
-                                    else if (item.route) setRoute(item.route);
-                                }}
-                                style={{ marginBottom: 6, padding: "11px 14px" }}
-                            >
-                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ fontSize: 13.5, fontWeight: 500, color: p.text }}>
-                                            {item.label}
+                        {group.items.map((item) => {
+                            const isToggle = item.toggle === "spacePanel";
+                            return (
+                                <Card
+                                    key={item.label}
+                                    onClick={() => {
+                                        if (isToggle) {
+                                            const next = !spacePanelOn;
+                                            setSpacePanelOn(next);
+                                            setSpacePanelVisible(next);
+                                        } else if (item.element) {
+                                            onNavigateElement();
+                                        } else if (item.route) {
+                                            setRoute(item.route);
+                                        }
+                                    }}
+                                    style={{ marginBottom: 6, padding: "11px 14px" }}
+                                >
+                                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ fontSize: 13.5, fontWeight: 500, color: p.text }}>
+                                                {item.label}
+                                            </div>
+                                            <div style={{ fontSize: 11.5, color: p.textDim, marginTop: 2 }}>
+                                                {item.desc}
+                                            </div>
                                         </div>
-                                        <div style={{ fontSize: 11.5, color: p.textDim, marginTop: 2 }}>
-                                            {item.desc}
-                                        </div>
+                                        {isToggle ? (
+                                            <span
+                                                style={{
+                                                    fontSize: 12,
+                                                    color: spacePanelOn ? p.accent : p.textDim,
+                                                    flexShrink: 0,
+                                                }}
+                                            >
+                                                {spacePanelOn ? "已显示" : "已收起"}
+                                            </span>
+                                        ) : (
+                                            <span style={{ color: p.textDim, fontSize: 14 }}>›</span>
+                                        )}
                                     </div>
-                                    <span style={{ color: p.textDim, fontSize: 14 }}>›</span>
-                                </div>
-                            </Card>
-                        ))}
+                                </Card>
+                            );
+                        })}
                     </div>
                 ))}
             </Scroll>

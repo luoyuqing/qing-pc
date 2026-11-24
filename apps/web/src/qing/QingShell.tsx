@@ -14,6 +14,9 @@ import { TasksPage } from "./pages/TasksPage";
 import { ServicesPage } from "./pages/ServicesPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { ArchivePage } from "./pages/ArchivePage";
+import "./styles.css";
+// 副作用导入：默认收起 Element 的空间栏，只留 Qing 一条一级导航
+import "./spacePanel";
 
 export type QingTab = "chat" | "archive" | "briefing" | "tasks" | "services" | "settings";
 

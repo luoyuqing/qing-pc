@@ -44,33 +44,70 @@ export function saveConfig(config: HubConfig): void {
 
 export class HubError extends Error {}
 
+/** 主进程代理接口（preload 暴露）。没有它就只能退回浏览器 fetch。 */
+interface QingHubBridge {
+    request(req: {
+        url: string;
+        method?: string;
+        headers?: Record<string, string>;
+        body?: string;
+    }): Promise<{ ok: boolean; status: number; body: string }>;
+}
+
+function hubBridge(): QingHubBridge | undefined {
+    return (window as unknown as { qingHub?: QingHubBridge }).qingHub;
+}
+
 async function request(path: string, init?: RequestInit): Promise<any> {
     const { baseUrl, token } = loadConfig();
     const headers: Record<string, string> = { Accept: "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
     if (init?.body) headers["Content-Type"] = "application/json; charset=utf-8";
 
-    let response: Response;
+    const url = `${baseUrl}${path}`;
+    let status = 0;
+    let text = "";
+
     try {
-        // 必须有超时：device-hub 不可达时 TCP 可能长时间挂起，
-        // 没有 signal 的话页面会永远停在「加载中」。
-        response = await fetch(`${baseUrl}${path}`, {
-            ...init,
-            headers,
-            signal: AbortSignal.timeout(10000),
-        });
+        const bridge = hubBridge();
+        if (bridge?.request) {
+            // 走 Electron 主进程：渲染进程的 origin 是 vector://vector，
+            // 对公网 device-hub 属于跨域；主进程不受同源策略约束。
+            const res = await bridge.request({
+                url,
+                method: init?.method ?? "GET",
+                headers,
+                body: typeof init?.body === "string" ? init.body : undefined,
+            });
+            status = res.status;
+            text = res.body;
+        } else {
+            // 没有主进程代理时（例如在浏览器里调试）才用 fetch
+            const response = await fetch(url, {
+                ...init,
+                headers,
+                signal: AbortSignal.timeout(10000),
+            });
+            status = response.status;
+            text = await response.text();
+        }
     } catch (e) {
         const err = e as Error;
-        if (err.name === "TimeoutError" || err.name === "AbortError") {
+        const msg = err?.message || String(e);
+        if (err.name === "TimeoutError" || err.name === "AbortError" || /timed out|timeout/i.test(msg)) {
             throw new HubError(`${baseUrl} 响应超时（10 秒），检查地址与网络`);
         }
-        throw new HubError(`无法连接 ${baseUrl}：${err.message}`);
+        if (/Failed to fetch|NetworkError|ERR_/i.test(msg)) {
+            throw new HubError(
+                `无法连接 ${baseUrl}：${msg}（若地址可访问，可能是跨域被拦，PC 端应走主进程代理）`,
+            );
+        }
+        throw new HubError(`请求 ${baseUrl} 失败：${msg}`);
     }
-    if (!response.ok) {
-        const body = await response.text().catch(() => "");
-        throw new HubError(`HTTP ${response.status} ${body.slice(0, 200)}`.trim());
+
+    if (status < 200 || status >= 300) {
+        throw new HubError(`HTTP ${status} ${text.slice(0, 200)}`.trim());
     }
-    const text = await response.text();
     if (!text) return null;
     try {
         return JSON.parse(text);
