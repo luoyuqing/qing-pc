@@ -15,10 +15,13 @@ import { Button, Card, Empty, PageHeader, Scroll } from "../ui";
 import { palette } from "../theme";
 
 const ROOM_TAGS_EVENT = "Room.tags";
+const ROOM_UNREAD_EVENT = "Room.unread_notifications";
 
 interface RoomInfo {
     id: string;
     name: string;
+    /** 该会话的未读条数，用于列表里逐条标出 */
+    unread: number;
 }
 
 export const ArchivePage: React.FC<{ onOpenRoom: (roomId: string) => void }> = ({ onOpenRoom }) => {
@@ -41,7 +44,11 @@ export const ArchivePage: React.FC<{ onOpenRoom: (roomId: string) => void }> = (
         if (!client) return;
         const rooms: any[] = client.getRooms?.() || [];
         const joined = rooms.filter((r) => r?.getMyMembership?.() === "join");
-        const map = (r: any): RoomInfo => ({ id: r.roomId, name: r.name || r.roomId });
+        const map = (r: any): RoomInfo => ({
+            id: r.roomId,
+            name: r.name || r.roomId,
+            unread: r.getUnreadNotificationCount?.() ?? 0,
+        });
 
         setArchived(joined.filter((r) => r?.tags?.[QING_ARCHIVE_TAG]).map(map));
         setAllRooms(joined.map(map).sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN")));
@@ -52,7 +59,11 @@ export const ArchivePage: React.FC<{ onOpenRoom: (roomId: string) => void }> = (
         if (!client) return;
         // 打/撤 tag 会触发 Room.tags，列表随之刷新
         client.on(ROOM_TAGS_EVENT as any, refresh);
-        return () => client.off(ROOM_TAGS_EVENT as any, refresh);
+        client.on(ROOM_UNREAD_EVENT as any, refresh);
+        return () => {
+            client.off(ROOM_TAGS_EVENT as any, refresh);
+            client.off(ROOM_UNREAD_EVENT as any, refresh);
+        };
     }, [client, refresh]);
 
     const archive = async (roomId: string) => {
@@ -129,6 +140,25 @@ export const ArchivePage: React.FC<{ onOpenRoom: (roomId: string) => void }> = (
                                     <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: p.text }}>
                                         {r.name}
                                     </div>
+                                    {r.unread > 0 && (
+                                        <span
+                                            style={{
+                                                minWidth: 17,
+                                                height: 17,
+                                                padding: "0 5px",
+                                                borderRadius: 9,
+                                                background: p.danger,
+                                                color: "#fff",
+                                                fontSize: 10.5,
+                                                lineHeight: "17px",
+                                                textAlign: "center",
+                                                fontWeight: 600,
+                                                boxSizing: "border-box",
+                                            }}
+                                        >
+                                            {r.unread > 99 ? "99+" : r.unread}
+                                        </span>
+                                    )}
                                     <span style={{ fontSize: 11.5, color: p.textDim }}>
                                         {busy === r.id ? "归档中…" : "归档"}
                                     </span>
@@ -147,8 +177,33 @@ export const ArchivePage: React.FC<{ onOpenRoom: (roomId: string) => void }> = (
                                     onClick={() => onOpenRoom(r.id)}
                                     style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
                                 >
-                                    <div style={{ fontSize: 13.5, color: p.text, fontWeight: 500 }}>{r.name}</div>
-                                    <div style={{ fontSize: 11.5, color: p.textDim, marginTop: 2 }}>点击打开</div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                        <span style={{ fontSize: 13.5, color: p.text, fontWeight: 500 }}>
+                                            {r.name}
+                                        </span>
+                                        {r.unread > 0 && (
+                                            <span
+                                                style={{
+                                                    minWidth: 17,
+                                                    height: 17,
+                                                    padding: "0 5px",
+                                                    borderRadius: 9,
+                                                    background: p.danger,
+                                                    color: "#fff",
+                                                    fontSize: 10.5,
+                                                    lineHeight: "17px",
+                                                    textAlign: "center",
+                                                    fontWeight: 600,
+                                                    boxSizing: "border-box",
+                                                }}
+                                            >
+                                                {r.unread > 99 ? "99+" : r.unread}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div style={{ fontSize: 11.5, color: p.textDim, marginTop: 2 }}>
+                                        {r.unread > 0 ? `${r.unread} 条未读` : "点击打开"}
+                                    </div>
                                 </div>
                                 <Button disabled={busy === r.id} onClick={() => void unarchive(r.id)}>
                                     {busy === r.id ? "…" : "取消归档"}

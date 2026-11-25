@@ -70,12 +70,10 @@ const SettingsIcon: React.FC<IconProps> = ({ active }) => (
     </svg>
 );
 
-/**
- * 一级导航顺序与手机端底部导航一致：聊天 / 简报 / 任务 / 服务 / 设置。
- * 归档在手机端是聊天列表里的入口，不是一级 Tab，所以这里单独放在最下面。
- */
+/** 一级导航：归档紧跟聊天之后，其余与手机底部导航一致 */
 const TABS: { id: QingTab; label: string; icon: React.FC<IconProps> }[] = [
     { id: "chat", label: "聊天", icon: ChatIcon },
+    { id: "archive", label: "归档", icon: ArchiveIcon },
     { id: "briefing", label: "简报", icon: BriefingIcon },
     { id: "tasks", label: "任务", icon: TasksIcon },
     { id: "services", label: "服务", icon: ServicesIcon },
@@ -195,44 +193,11 @@ export const QingShell: React.FC = () => {
                             <Icon active={active} />
                             <span style={{ fontSize: 11, lineHeight: 1 }}>{label}</span>
                             {id === "chat" && <Badge n={unread.chat} color={p.danger} />}
+                            {id === "archive" && <Badge n={unread.archive} color={p.danger} />}
                         </button>
                     );
                 })}
 
-                {/* 归档：手机端放在聊天列表里，这里作为导航底部的次级入口 */}
-                <div style={{ height: 1, background: p.border, margin: "6px 8px 4px" }} />
-                {(() => {
-                    const active = tab === "archive";
-                    const hot = active || hovered === "archive";
-                    return (
-                        <button
-                            type="button"
-                            title="归档"
-                            onClick={() => setTab("archive")}
-                            onMouseEnter={() => setHovered("archive")}
-                            onMouseLeave={() => setHovered(null)}
-                            style={{
-                                position: "relative",
-                                width: 48,
-                                padding: "7px 0 5px",
-                                display: "flex",
-                                flexDirection: "column",
-                                alignItems: "center",
-                                gap: 3,
-                                border: "none",
-                                borderRadius: 12,
-                                cursor: "pointer",
-                                background: active ? p.accentSoft : "transparent",
-                                color: hot ? p.accent : p.textDim,
-                                transition: "background 120ms ease, color 120ms ease",
-                            }}
-                        >
-                            <ArchiveIcon active={active} />
-                            <span style={{ fontSize: 11, lineHeight: 1 }}>归档</span>
-                            <Badge n={unread.archive} color={p.danger} />
-                        </button>
-                    );
-                })()}
             </nav>
 
             {tab !== "chat" && (
