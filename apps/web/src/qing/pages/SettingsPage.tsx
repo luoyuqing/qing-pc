@@ -17,6 +17,8 @@ Qing PC · 设置
 
 import React, { useState } from "react";
 import { MatrixClientPeg } from "../../MatrixClientPeg";
+import dis from "../../dispatcher/dispatcher";
+import { Action } from "../../dispatcher/actions";
 import { DEFAULT_BASE_URL, hub, loadConfig, saveConfig } from "../hub";
 import { Button, Card, PageHeader, Scroll } from "../ui";
 import { palette } from "../theme";
@@ -44,36 +46,39 @@ type Route =
     | "privacy"
     | "devices";
 
-type Action = "element" | "tab" | "logout" | "route";
+type MenuAction = "element" | "tab" | "logout" | "route";
 
 interface MenuItem {
     label: string;
     desc?: string;
-    action: Action;
+    action: MenuAction;
     route?: Route;
     danger?: boolean;
 }
 
-const MENU: (MenuItem | "divider")[] = [
-    { label: "聊天备份", desc: "端到端加密密钥备份", action: "element" },
-    { label: "账号管理", desc: "头像、昵称、密码", action: "element" },
-    { label: "修改主题", desc: "深色/浅色、字号、布局", action: "element" },
-    { label: "通知", desc: "系统通知、提示音、免打扰", action: "element" },
-    { label: "记忆", desc: "记忆 · 画像 · 技能 · 人设", action: "route", route: "memory" },
-    { label: "设备数据", desc: "通知 · 日历 · 通讯录 · 应用时长", action: "route", route: "device-data" },
+const MENU: (MenuItem | "divider" | string)[] = [
+    // ---- Qing 管理（本机 / X2 上的真实功能）----
+    "group:清助理",
     { label: "服务器状态", desc: "CPU、内存、磁盘、服务与容器的实时占用", action: "route", route: "server" },
-    { label: "服务", desc: "本机管理页面 · 一次性票据打开", action: "tab" },
+    { label: "记忆", desc: "记忆 · 画像 · 技能 · 人设", action: "route", route: "memory" },
     { label: "模型与推理", desc: "端点 · 模型 · 候选池 · 备用链（按人设独立）", action: "route", route: "model" },
     { label: "凭据", desc: "模型端点的 API Key 增删改", action: "route", route: "credentials" },
     { label: "插件与能力", desc: "X2 上已安装 / 内置的插件", action: "route", route: "plugins" },
     { label: "用量", desc: "请求数 · Tokens · 预估花费（按模型/人设）", action: "route", route: "usage" },
-    { label: "连接应用", desc: "MCP 服务（由 X2 代理，凭据不上手机）", action: "route", route: "mcp" },
+    { label: "设备数据", desc: "通知 · 日历 · 通讯录 · 应用时长", action: "route", route: "device-data" },
+    { label: "连接应用", desc: "MCP 服务（由 X2 代理）", action: "route", route: "mcp" },
     { label: "数据与隐私", desc: "数据保留策略 · 存储位置", action: "route", route: "privacy" },
-    { label: "设备", desc: "已配对设备与令牌", action: "route", route: "devices" },
+
+    // ---- Element 自带设置（放最后）----
+    "group:Element 设置",
+    { label: "聊天备份", desc: "端到端加密密钥备份", action: "element" },
+    { label: "账号管理", desc: "头像、昵称、密码", action: "element" },
+    { label: "修改主题", desc: "深色/浅色、字号、布局", action: "element" },
+    { label: "通知", desc: "系统通知、提示音、免打扰", action: "element" },
     { label: "聊天", desc: "消息显示、媒体、链接预览", action: "element" },
     { label: "安全", desc: "加密、会话验证、密钥备份", action: "element" },
-    "divider",
     { label: "隐私", desc: "已读回执、输入状态、分析", action: "element" },
+
     "divider",
     { label: "退出登录", action: "logout", danger: true },
 ];
@@ -293,6 +298,23 @@ export const SettingsPage: React.FC<{
             />
         );
 
+    /**
+     * Element 自带设置是 Modal（UserSettingsDialog），只能通过 dispatcher 触发。
+     * 同步 fire，不延迟——延迟会让组件先卸载，实测时机不可靠。
+     * 优先用 Element 注册在 window 上的单例，其次退回 import 的实例。
+     */
+    const openElementSettings = () => {
+        const bridge = (window as unknown as { mxDispatcher?: { fire: (a: string) => void } }).mxDispatcher;
+        console.log("[qing] openElementSettings", typeof bridge?.fire);
+        try {
+            if (bridge?.fire) bridge.fire("view_user_settings");
+            else dis.fire(Action.ViewUserSettings);
+        } catch (e) {
+            console.error("[qing] fire failed", e);
+        }
+        onNavigateElement();
+    };
+
     const logout = async () => {
         if (!window.confirm("退出登录？本机缓存的消息会保留，重新登录即可恢复。")) return;
         try {
@@ -309,12 +331,28 @@ export const SettingsPage: React.FC<{
             <Scroll>
                 {MENU.map((item, i) => {
                     if (item === "divider") return <Divider key={`d${i}`} />;
+                    if (typeof item === "string" && item.startsWith("group:")) {
+                        const title = item.slice(6);
+                        return (
+                            <div
+                                key={`g${i}`}
+                                style={{
+                                    fontSize: 11.5,
+                                    color: p.textDim,
+                                    margin: i === 0 ? "2px 0 8px" : "18px 0 8px",
+                                    letterSpacing: 0.3,
+                                }}
+                            >
+                                {title}
+                            </div>
+                        );
+                    }
                     return (
                         <Card
                             key={item.label}
                             onClick={() => {
                                 if (item.action === "route" && item.route) setRoute(item.route);
-                                else if (item.action === "element") onNavigateElement();
+                                else if (item.action === "element") openElementSettings();
                                 else if (item.action === "tab") onNavigateTab?.("services");
                                 else if (item.action === "logout") void logout();
                             }}

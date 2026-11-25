@@ -334,7 +334,12 @@ ipcMain.handle("qingOpenService", async (_ev, rawUrl: string): Promise<boolean> 
         }
         return { action: "deny" };
     });
-    void win.loadURL(rawUrl);
+    // 等页面真正加载完再返回，前端据此收起「正在打开…」的等待态。
+    // 加个上限，避免个别页面长连接一直不触发 did-finish-load 而卡住 UI。
+    await Promise.race([
+        win.loadURL(rawUrl),
+        new Promise<void>((resolve) => setTimeout(resolve, 8000)),
+    ]);
     return true;
 });
 

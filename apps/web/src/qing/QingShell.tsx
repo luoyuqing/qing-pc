@@ -7,8 +7,10 @@ Qing PC · 主导航
 - 其余：整块面板覆盖内容区，Element 组件保持挂载，切回时不丢状态
 */
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { palette, QING } from "./theme";
+import { MatrixClientPeg } from "../MatrixClientPeg";
+import { QING_ARCHIVE_TAG } from "../stores/room-list-v3/isRoomVisible";
 import { BriefingPage } from "./pages/BriefingPage";
 import { TasksPage } from "./pages/TasksPage";
 import { ServicesPage } from "./pages/ServicesPage";
@@ -80,8 +82,67 @@ const TABS: { id: QingTab; label: string; icon: React.FC<IconProps> }[] = [
     { id: "settings", label: "设置", icon: SettingsIcon },
 ];
 
+/** 导航上的未读角标 */
+const Badge: React.FC<{ n: number; color: string }> = ({ n, color }) =>
+    n > 0 ? (
+        <span
+            style={{
+                position: "absolute",
+                top: 2,
+                right: 2,
+                minWidth: 15,
+                height: 15,
+                padding: "0 4px",
+                borderRadius: 8,
+                background: color,
+                color: "#fff",
+                fontSize: 9.5,
+                lineHeight: "15px",
+                textAlign: "center",
+                fontWeight: 600,
+                boxSizing: "border-box",
+            }}
+        >
+            {n > 99 ? "99+" : n}
+        </span>
+    ) : null;
+
 export const QingShell: React.FC = () => {
     const [tab, setTab] = useState<QingTab>("chat");
+    const [unread, setUnread] = useState<{ chat: number; archive: number }>({ chat: 0, archive: 0 });
+
+    // 聊天 / 归档分别统计未读（归档房间不算进聊天）
+    useEffect(() => {
+        let client: any;
+        try {
+            client = MatrixClientPeg.safeGet();
+        } catch {
+            return;
+        }
+        const calc = () => {
+            let c = 0;
+            let a = 0;
+            for (const r of client.getRooms?.() || []) {
+                if (r.getMyMembership?.() !== "join") continue;
+                const n = r.getUnreadNotificationCount?.() ?? 0;
+                if (!n) continue;
+                if (r.tags?.[QING_ARCHIVE_TAG]) a += n;
+                else c += n;
+            }
+            setUnread((prev) => (prev.chat === c && prev.archive === a ? prev : { chat: c, archive: a }));
+        };
+        calc();
+        client.on("Room.unread_notifications", calc);
+        client.on("Room.tags", calc);
+        client.on("Room.accountData", calc);
+        const timer = window.setInterval(calc, 6000);
+        return () => {
+            client.off("Room.unread_notifications", calc);
+            client.off("Room.tags", calc);
+            client.off("Room.accountData", calc);
+            window.clearInterval(timer);
+        };
+    }, []);
     const [hovered, setHovered] = useState<QingTab | null>(null);
     const p = palette();
 
@@ -116,6 +177,7 @@ export const QingShell: React.FC = () => {
                             onMouseEnter={() => setHovered(id)}
                             onMouseLeave={() => setHovered(null)}
                             style={{
+                                position: "relative",
                                 width: 48,
                                 padding: "7px 0 5px",
                                 display: "flex",
@@ -132,6 +194,7 @@ export const QingShell: React.FC = () => {
                         >
                             <Icon active={active} />
                             <span style={{ fontSize: 11, lineHeight: 1 }}>{label}</span>
+                            {id === "chat" && <Badge n={unread.chat} color={p.danger} />}
                         </button>
                     );
                 })}
@@ -149,6 +212,7 @@ export const QingShell: React.FC = () => {
                             onMouseEnter={() => setHovered("archive")}
                             onMouseLeave={() => setHovered(null)}
                             style={{
+                                position: "relative",
                                 width: 48,
                                 padding: "7px 0 5px",
                                 display: "flex",
@@ -165,6 +229,7 @@ export const QingShell: React.FC = () => {
                         >
                             <ArchiveIcon active={active} />
                             <span style={{ fontSize: 11, lineHeight: 1 }}>归档</span>
+                            <Badge n={unread.archive} color={p.danger} />
                         </button>
                     );
                 })()}
@@ -205,10 +270,7 @@ export const QingShell: React.FC = () => {
                     {tab === "services" && <ServicesPage />}
                     {tab === "settings" && (
                         <SettingsPage
-                            onNavigateElement={() => {
-                                window.location.hash = "#/settings";
-                                setTab("chat");
-                            }}
+                            onNavigateElement={() => setTab("chat")}
                             onNavigateTab={(t) => setTab(t)}
                             onLogout={() => {
                                 window.location.hash = "#/login";
