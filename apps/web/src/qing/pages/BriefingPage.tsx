@@ -31,6 +31,10 @@ export const BriefingPage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [requesting, setRequesting] = useState(false);
     const [tick, setTick] = useState(0);
+    const [view, setView] = useState<"day" | "history">("day");
+    const [history, setHistory] = useState<any[]>([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
+    const [openedHistory, setOpenedHistory] = useState<any | null>(null);
     const p = palette();
 
     const load = useCallback(async () => {
@@ -57,6 +61,19 @@ export const BriefingPage: React.FC = () => {
     useEffect(() => {
         void load();
     }, [load, tick]);
+
+    const openHistory = async () => {
+        setView("history");
+        setOpenedHistory(null);
+        if (history.length) return;
+        setHistoryLoading(true);
+        try {
+            setHistory(itemsOf(await hub.briefingHistory()));
+        } catch (e) {
+            setError((e as Error).message);
+        }
+        setHistoryLoading(false);
+    };
 
     const current = items.find((x) => x.kind === kind);
     const isToday = date === today();
@@ -85,6 +102,66 @@ export const BriefingPage: React.FC = () => {
         setRequesting(false);
     };
 
+    if (view === "history") {
+        if (openedHistory) {
+            return (
+                <>
+                    <PageHeader
+                        title={`${openedHistory.day || ""} · ${openedHistory.kind === "evening" ? "晚报" : "晨报"}`}
+                        onBack={() => setOpenedHistory(null)}
+                    />
+                    <Scroll>
+                        <Markdown text={`${openedHistory.content || ""}`} />
+                    </Scroll>
+                </>
+            );
+        }
+        return (
+            <>
+                <PageHeader
+                    title="简报历史"
+                    subtitle={`共 ${history.length} 篇`}
+                    onBack={() => setView("day")}
+                />
+                {historyLoading ? (
+                    <Loading />
+                ) : history.length === 0 ? (
+                    <Empty text="还没有历史简报。" />
+                ) : (
+                    <Scroll>
+                        {history.map((h, i) => (
+                            <Card
+                                key={i}
+                                onClick={() => setOpenedHistory(h)}
+                                style={{ marginBottom: 8, padding: "10px 14px" }}
+                            >
+                                <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+                                    <span style={{ fontSize: 13, color: p.text, fontWeight: 500 }}>{h.day}</span>
+                                    <span style={{ fontSize: 11, color: p.accent }}>
+                                        {h.kind === "evening" ? "晚报" : "晨报"}
+                                    </span>
+                                    <span style={{ fontSize: 11, color: p.textDim, marginLeft: "auto" }}>{h.persona}</span>
+                                </div>
+                                <div
+                                    style={{
+                                        fontSize: 11.5,
+                                        color: p.textDim,
+                                        marginTop: 4,
+                                        lineHeight: 1.55,
+                                        maxHeight: 40,
+                                        overflow: "hidden",
+                                    }}
+                                >
+                                    {`${h.content || ""}`.replace(/[#>*\n]/g, " ").slice(0, 120)}
+                                </div>
+                            </Card>
+                        ))}
+                    </Scroll>
+                )}
+            </>
+        );
+    }
+
     return (
         <>
             <PageHeader
@@ -98,6 +175,7 @@ export const BriefingPage: React.FC = () => {
                 }
                 right={
                     <>
+                        <Button onClick={() => void openHistory()}>历史</Button>
                         <Button onClick={() => setDate(shift(date, -1))}>前一天</Button>
                         <Button disabled={!isToday} onClick={() => setDate(shift(date, 1))}>
                             后一天

@@ -8,6 +8,7 @@ Qing PC · 任务
 
 import React, { useCallback, useEffect, useState } from "react";
 import { hub, itemsOf, loadConfig } from "../hub";
+import { MatrixClientPeg } from "../../MatrixClientPeg";
 import { Markdown } from "../Markdown";
 import { PersonaPicker } from "../PersonaPicker";
 import { Button, Card, Empty, ErrorBox, Loading, PageHeader, Scroll } from "../ui";
@@ -36,7 +37,10 @@ function writeFavs(list: FavSession[]): void {
     window.localStorage.setItem(FAV_KEY, JSON.stringify(list));
 }
 
-export const TasksPage: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
+export const TasksPage: React.FC<{ onBack?: () => void; onOpenRoom?: (roomId: string) => void }> = ({
+    onBack,
+    onOpenRoom,
+}) => {
     const [persona, setPersona] = useState(loadConfig().persona);
     const [tab, setTab] = useState<Tab>("sessions");
     const [sessions, setSessions] = useState<any[]>([]);
@@ -85,6 +89,32 @@ export const TasksPage: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
         setMessagesLoading(false);
     };
 
+    /** 按会话名到 Matrix 房间里找同名的，找到就跳过去 */
+    const openInChat = (session: any) => {
+        const name = `${session?.name || ""}`.trim();
+        if (!name) {
+            window.alert("这个会话没有名字，无法匹配房间。");
+            return;
+        }
+        let client: any;
+        try {
+            client = MatrixClientPeg.safeGet();
+        } catch {
+            return;
+        }
+        const rooms: any[] = client.getRooms?.() || [];
+        const hit =
+            rooms.find((r) => (r.name || "").trim() === name) ||
+            rooms.find((r) => (r.name || "").includes(name)) ||
+            rooms.find((r) => name.includes((r.name || "").trim()) && (r.name || "").trim().length > 1);
+        if (!hit) {
+            window.alert(`没找到名为「${name}」的聊天房间。`);
+            return;
+        }
+        if (onOpenRoom) onOpenRoom(hit.roomId);
+        else window.location.hash = `#/room/${encodeURIComponent(hit.roomId)}`;
+    };
+
     const toggleFav = (s: any) => {
         const id = `${s.id}`;
         const exists = favs.some((f) => f.id === id);
@@ -120,9 +150,12 @@ export const TasksPage: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                         setMessages([]);
                     }}
                     right={
-                        <Button onClick={() => toggleFav(opened)}>
-                            {favs.some((f) => f.id === `${opened.id}`) ? "取消收藏" : "收藏"}
-                        </Button>
+                        <>
+                            <Button onClick={() => openInChat(opened)}>去聊天</Button>
+                            <Button onClick={() => toggleFav(opened)}>
+                                {favs.some((f) => f.id === `${opened.id}`) ? "取消收藏" : "收藏"}
+                            </Button>
+                        </>
                     }
                 />
                 {messagesLoading ? (

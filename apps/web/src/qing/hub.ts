@@ -119,6 +119,13 @@ async function request(path: string, init?: RequestInit): Promise<any> {
 export const hub = {
     health: (): Promise<any> => request("/health"),
 
+    /** 用 6 位配对码换长期令牌，与手机端同一流程，返回 {token, device_id} */
+    pair: (code: string, deviceName: string): Promise<any> =>
+        request("/pair", {
+            method: "POST",
+            body: JSON.stringify({ code, device_name: deviceName }),
+        }),
+
     briefingDay: (date: string): Promise<any> => request(`/briefing/day?date=${encodeURIComponent(date)}`),
 
     requestBriefing: (kind?: string): Promise<any> =>
@@ -162,8 +169,12 @@ export const hub = {
         request(`/agent/fallback${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
     agentAuxiliary: (persona?: string): Promise<any> =>
         request(`/agent/auxiliary${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
-    switchModel: (key: string, persona?: string): Promise<any> =>
-        request("/agent/model/switch", { method: "POST", body: JSON.stringify({ key, persona }) }),
+    switchModel: (candidate: string, persona?: string): Promise<any> =>
+        // 注意参数名是 candidate，不是 key（见手机端 switchModel）
+        request("/agent/model/switch", {
+            method: "POST",
+            body: JSON.stringify({ persona, candidate }),
+        }),
 
     // ---- 凭据 / 插件 ----
     agentCredentials: (): Promise<any> => request("/agent/credentials"),
@@ -239,7 +250,70 @@ export const hub = {
     // ---- 设备 / 审计 / 诊断 ----
     devices: (): Promise<any> => request("/query/devices"),
     audit: (): Promise<any> => request("/audit"),
-    diagnose: (): Promise<any> => request("/diagnose"),
+    diagnose: (persona?: string): Promise<any> =>
+        request(`/diagnose${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
+
+    // ---- 手机数据（Android 上报，PC 只读） ----
+    notifications: (limit = 100): Promise<any> => request(`/query/notifications?limit=${limit}`),
+    sms: (limit = 100): Promise<any> => request(`/query/sms?limit=${limit}`),
+    calendar: (): Promise<any> => request("/query/calendar"),
+    contacts: (limit = 200): Promise<any> => request(`/query/contacts?limit=${limit}`),
+    deviceUsage: (date?: string): Promise<any> =>
+        request(`/query/usage${date ? `?date=${encodeURIComponent(date)}` : ""}`),
+
+    // ---- 简报历史 ----
+    briefingHistory: (persona?: string): Promise<any> =>
+        request(`/briefing/history${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
+
+    // ---- 模型测试与端点 ----
+    testModel: (key?: string, persona?: string): Promise<any> =>
+        request("/agent/model/test", { method: "POST", body: JSON.stringify({ key, persona }) }),
+    testFallback: (persona?: string): Promise<any> =>
+        request("/agent/fallback/test", { method: "POST", body: JSON.stringify({ persona }) }),
+    endpointModels: (baseUrl: string): Promise<any> =>
+        request(`/agent/endpoint/models?base_url=${encodeURIComponent(baseUrl)}`),
+
+    // ---- 凭据 / 辅助模型 ----
+    setCredential: (name: string, value: string): Promise<any> =>
+        request("/agent/credentials", { method: "POST", body: JSON.stringify({ name, value }) }),
+    deleteCredential: (name: string): Promise<any> =>
+        request(`/agent/credentials/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    saveAuxiliary: (persona: string, payload: any): Promise<any> =>
+        request("/agent/auxiliary", { method: "POST", body: JSON.stringify({ persona, ...payload }) }),
+
+    // ---- 候选池增删改 / 备注 / 备用链 ----
+    addCandidate: (payload: any, persona: string): Promise<any> =>
+        request("/agent/candidates", { method: "POST", body: JSON.stringify({ persona, ...payload }) }),
+    updateCandidate: (key: string, persona: string, fields: any, scope = "persona"): Promise<any> =>
+        request(
+            `/agent/candidates/${encodeURIComponent(key)}?persona=${encodeURIComponent(persona)}&scope=${scope}`,
+            { method: "PATCH", body: JSON.stringify(fields) },
+        ),
+    deleteCandidate: (key: string, persona: string, scope = "persona"): Promise<any> =>
+        request(
+            `/agent/candidates/${encodeURIComponent(key)}?persona=${encodeURIComponent(persona)}&scope=${scope}`,
+            { method: "DELETE" },
+        ),
+    testCandidate: (key: string, persona: string): Promise<any> =>
+        request(`/agent/candidates/${encodeURIComponent(key)}/test`, {
+            method: "POST",
+            body: JSON.stringify({ persona }),
+        }),
+    /** 只改主模型备注：同端点同模型，复用 switch 接口重写 label */
+    setModelLabel: (persona: string, baseUrl: string, model: string, label: string): Promise<any> =>
+        request("/agent/model/switch", {
+            method: "POST",
+            body: JSON.stringify({
+                persona,
+                base_url: baseUrl,
+                model,
+                label,
+                provider: "custom",
+                api_mode: "chat_completions",
+            }),
+        }),
+    saveFallback: (persona: string, chain: any[]): Promise<any> =>
+        request("/agent/fallback", { method: "POST", body: JSON.stringify({ persona, chain }) }),
 };
 
 
