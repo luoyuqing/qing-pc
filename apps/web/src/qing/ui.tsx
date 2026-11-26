@@ -65,18 +65,20 @@ export const PageHeader: React.FC<{
 };
 
 export const Button: React.FC<{
-    children: React.ReactNode;
-    onClick?: React.MouseEventHandler<HTMLButtonElement>;
-    disabled?: boolean;
-    variant?: "primary" | "ghost";
-    title?: string;
-}> = ({ children, onClick, disabled, variant = "ghost", title }): React.ReactNode => {
+    "children": React.ReactNode;
+    "onClick"?: React.MouseEventHandler<HTMLButtonElement>;
+    "disabled"?: boolean;
+    "variant"?: "primary" | "ghost";
+    "title"?: string;
+    "aria-label"?: string;
+}> = ({ children, onClick, disabled, variant = "ghost", title, "aria-label": ariaLabel }): React.ReactNode => {
     const p = palette();
     const primary = variant === "primary";
     return (
         <button
             type="button"
             title={title}
+            aria-label={ariaLabel}
             disabled={disabled}
             onClick={onClick}
             style={{
@@ -86,7 +88,7 @@ export const Button: React.FC<{
                 borderRadius: 8,
                 cursor: disabled ? "default" : "pointer",
                 opacity: disabled ? 0.5 : 1,
-                border: primary ? "none" : `1px solid ${p.border}`,
+                border: primary ? "none" : `1px solid ${p.divider}`,
                 background: primary ? p.accent : "transparent",
                 color: primary ? "#fff" : p.text,
                 transition: "opacity 120ms ease",
@@ -149,7 +151,8 @@ export const Card: React.FC<{
                 padding: 14,
                 borderRadius: 12,
                 background: p.bgAlt,
-                border: `1px solid ${p.border}`,
+                border: `1px solid ${p.divider}`,
+                boxSizing: "border-box",
                 cursor: onClick ? "pointer" : "default",
                 ...style,
             }}

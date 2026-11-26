@@ -40,6 +40,10 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
     const [nb, setNb] = useState("");
     const [ne, setNe] = useState("");
     const [tick, setTick] = useState(0);
+    const [editingFallback, setEditingFallback] = useState(false);
+    const [fallbackDraft, setFallbackDraft] = useState<
+        { key: string; label: string; model: string; base_url: string; provider: string; key_env: string }[]
+    >([]);
     const p = palette();
 
     const load = useCallback(async () => {
@@ -197,6 +201,80 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
         setBusy(null);
     };
 
+    const startEditFallback = (): void => {
+        const list = Array.isArray(data?.fallback) ? data.fallback : [];
+        setFallbackDraft(
+            list.map((f: any, idx: number) =>
+                typeof f === "string"
+                    ? { key: f, label: f, model: f, base_url: "", provider: "custom", key_env: "" }
+                    : {
+                          key: f.key || f.model || `fb-${idx}`,
+                          label: f.label || f.model || f.key || "",
+                          model: f.model || f.key || "",
+                          base_url: f.base_url || "",
+                          provider: f.provider || "custom",
+                          key_env: f.key_env || "",
+                      },
+            ),
+        );
+        setEditingFallback(true);
+    };
+
+    const toggleFallbackCandidate = (c: any): void => {
+        const cid = c.key || c.model;
+        setFallbackDraft((prev) => {
+            const exists = prev.some(
+                (item) => item.key === cid || (item.model === c.model && item.base_url === c.base_url),
+            );
+            if (exists) {
+                return prev.filter(
+                    (item) => !(item.key === cid || (item.model === c.model && item.base_url === c.base_url)),
+                );
+            }
+            return [
+                ...prev,
+                {
+                    key: cid,
+                    label: c.label || c.model || cid,
+                    model: c.model || cid,
+                    base_url: c.base_url || "",
+                    provider: c.provider || "custom",
+                    key_env: c.key_env || "",
+                },
+            ];
+        });
+    };
+
+    const moveFallbackDraft = (index: number, delta: -1 | 1): void => {
+        setFallbackDraft((prev) => {
+            const nextIndex = index + delta;
+            if (nextIndex < 0 || nextIndex >= prev.length) return prev;
+            const next = [...prev];
+            [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+            return next;
+        });
+    };
+
+    const saveFallbackDraft = async (): Promise<void> => {
+        setBusy("fallback");
+        setError(null);
+        try {
+            const chain = fallbackDraft.map((item) => ({
+                provider: item.provider || "custom",
+                model: item.model,
+                base_url: item.base_url,
+                key_env: item.key_env,
+            }));
+            await hub.saveFallback(persona, chain);
+            setEditingFallback(false);
+            setSwitchNotice(_t("qing|text_1bd91a7d"));
+            await load();
+        } catch (e) {
+            setError(_t("qing|text_2ecda40c", { v0: (e as Error).message }));
+        }
+        setBusy(null);
+    };
+
     if (configure)
         return (
             <QingPanel
@@ -287,15 +365,15 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
                     </div>
                 )}
 
-                <Card style={{ marginBottom: 16, background: p.accentSoft, borderColor: "transparent" }}>
+                <Card style={{ marginBottom: 16, background: p.accentSoft, borderColor: p.divider }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontSize: 11.5, color: p.accent, fontWeight: 600 }}>
+                        <span style={{ font: "var(--cpd-font-body-xs-semibold)", color: p.accent }}>
                             {_t("qing|text_52f79fed")}
                         </span>
                         <span
                             style={{
                                 marginLeft: "auto",
-                                fontSize: 11,
+                                font: "var(--cpd-font-body-xs-semibold)",
                                 color: cur.has_key ? p.accent : p.danger,
                                 padding: "2px 8px",
                                 borderRadius: 999,
@@ -305,17 +383,30 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
                             {cur.has_key ? _t("qing|text_7e358a91") : _t("qing|text_3bb6c086")}
                         </span>
                     </div>
-                    <div style={{ fontSize: 16, fontWeight: 600, color: p.text, marginTop: 4 }}>
+                    <div style={{ font: "var(--cpd-font-body-md-semibold)", color: p.text, marginTop: 4 }}>
                         {cur.label || cur.model || _t("qing|text_80a57e03")}
                     </div>
-                    <div style={{ fontSize: 12, color: p.textDim, marginTop: 4, wordBreak: "break-all" }}>
+                    <div
+                        style={{
+                            font: "var(--cpd-font-body-sm-regular)",
+                            color: p.textDim,
+                            marginTop: 4,
+                            wordBreak: "break-all",
+                        }}
+                    >
                         {[cur.model, cur.base_url].filter(Boolean).join(" · ")}
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 10, flexWrap: "wrap" }}>
                         {cur.api_mode ? (
-                            <span style={{ fontSize: 11.5, color: p.textDim }}>{statusLabel(cur.api_mode)}</span>
+                            <span style={{ font: "var(--cpd-font-body-xs-regular)", color: p.textDim }}>
+                                {statusLabel(cur.api_mode)}
+                            </span>
                         ) : null}
-                        {cur.key_env ? <span style={{ fontSize: 11.5, color: p.textDim }}>{cur.key_env}</span> : null}
+                        {cur.key_env ? (
+                            <span style={{ font: "var(--cpd-font-body-xs-regular)", color: p.textDim }}>
+                                {cur.key_env}
+                            </span>
+                        ) : null}
                         <span style={{ marginLeft: "auto" }}>
                             <Button disabled={busy === "label"} onClick={() => void editLabel()}>
                                 {busy === "label" ? "…" : _t("qing|text_12a0d18f")}
@@ -326,7 +417,7 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
 
                 <>
                     <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: p.text }}>
+                        <span style={{ font: "var(--cpd-font-body-sm-semibold)", color: p.text }}>
                             {_t("qing|text_eea80913")}
                             {candidates.length}）
                         </span>
@@ -392,326 +483,577 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
                             </div>
                         </Card>
                     )}
-                    {candidates.map((c) => {
-                        const active = c.is_current || c.key === cur.key;
-                        const selected = selectedKey === c.key;
-                        const editing = editingKey === c.key;
-                        return (
-                            <Card
-                                key={c.key}
-                                onClick={() => setSelectedKey((prev) => (prev === c.key ? null : c.key))}
-                                style={{
-                                    marginBottom: 8,
-                                    opacity: busy && busy !== c.key ? 0.6 : 1,
-                                    borderColor: active ? p.accent : selected ? p.border : p.divider,
-                                }}
-                            >
-                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div
-                                            style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
-                                        >
-                                            <span style={{ fontSize: 13.5, fontWeight: 600, color: p.text }}>
-                                                {c.label || c.model || c.key}
-                                            </span>
-                                            {active && (
-                                                <span
-                                                    style={{
-                                                        fontSize: 11,
-                                                        fontWeight: 600,
-                                                        color: p.accent,
-                                                        background: p.accentSoft,
-                                                        padding: "2px 8px",
-                                                        borderRadius: 999,
-                                                    }}
-                                                >
-                                                    {_t("qing|text_fa48e893")}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div
-                                            style={{
-                                                fontSize: 11.5,
-                                                color: p.textDim,
-                                                marginTop: 3,
-                                                wordBreak: "break-all",
-                                            }}
-                                        >
-                                            {[c.model, c.base_url].filter(Boolean).join(" · ")}
-                                        </div>
-                                    </div>
-                                    {!active && (
-                                        <Button
-                                            variant="primary"
-                                            disabled={Boolean(busy)}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                void swap(c.key, c.label || c.model);
-                                            }}
-                                        >
-                                            {busy === c.key ? _t("qing|text_ad0196c8") : _t("qing|model_switch_btn")}
-                                        </Button>
-                                    )}
-                                </div>
-                                <div
+                    <div
+                        style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+                            gap: 12,
+                            alignItems: "stretch",
+                        }}
+                    >
+                        {candidates.map((c) => {
+                            const active = c.is_current || c.key === cur.key;
+                            const selected = selectedKey === c.key;
+                            const editing = editingKey === c.key;
+                            return (
+                                <Card
+                                    key={c.key}
+                                    onClick={() => setSelectedKey((prev) => (prev === c.key ? null : c.key))}
                                     style={{
+                                        height: "100%",
                                         display: "flex",
-                                        gap: 10,
-                                        marginTop: 8,
-                                        fontSize: 11,
-                                        color: p.textDim,
-                                        alignItems: "center",
-                                        flexWrap: "wrap",
+                                        flexDirection: "column",
+                                        gap: 6,
+                                        opacity: busy && busy !== c.key ? 0.6 : 1,
+                                        borderColor: active ? p.accent : p.divider,
                                     }}
                                 >
-                                    {c.key_env ? <span>{c.key_env}</span> : null}
-                                    {c.has_key === false && (
-                                        <span style={{ color: p.danger }}>{_t("qing|text_69415a73")}</span>
-                                    )}
-                                    {c.shared_endpoint && <span>{_t("qing|text_c3196258")}</span>}
-                                    <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-                                        <button
-                                            type="button"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                if (editing) setEditingKey(null);
-                                                else startEditCandidate(c);
-                                            }}
-                                            style={{
-                                                fontSize: 11,
-                                                padding: "3px 9px",
-                                                borderRadius: 6,
-                                                cursor: "pointer",
-                                                border: `1px solid ${p.divider}`,
-                                                background: "transparent",
-                                                color: p.text,
-                                            }}
-                                        >
-                                            {editing ? _t("qing|text_2cd0f3be") : _t("qing|text_05183656")}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                void testOne(c.key);
-                                            }}
-                                            disabled={busy === `test:${c.key}`}
-                                            style={{
-                                                fontSize: 11,
-                                                padding: "3px 9px",
-                                                borderRadius: 6,
-                                                cursor: "pointer",
-                                                border: `1px solid ${p.divider}`,
-                                                background: "transparent",
-                                                color: p.textDim,
-                                            }}
-                                        >
-                                            {busy === `test:${c.key}`
-                                                ? _t("qing|text_458748c7")
-                                                : _t("qing|text_6aa8f49c")}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                void removeOne(c);
-                                            }}
-                                            disabled={busy === `del:${c.key}`}
-                                            style={{
-                                                fontSize: 11,
-                                                padding: "3px 9px",
-                                                borderRadius: 6,
-                                                cursor: "pointer",
-                                                border: `1px solid ${p.divider}`,
-                                                background: "transparent",
-                                                color: p.danger,
-                                            }}
-                                        >
-                                            {_t("qing|text_2f9daa82")}
-                                        </button>
-                                    </span>
-                                </div>
-                                {selected && !editing && (
-                                    <div
-                                        style={{
-                                            marginTop: 10,
-                                            paddingTop: 10,
-                                            borderTop: `1px solid ${p.divider}`,
-                                            fontSize: 11.5,
-                                            color: p.textDim,
-                                            display: "grid",
-                                            gridTemplateColumns: "auto 1fr",
-                                            gap: "4px 12px",
-                                        }}
-                                    >
-                                        <span>{_t("qing|text_66e7500a")}</span>
-                                        <span style={{ color: p.text, fontFamily: "ui-monospace, monospace" }}>
-                                            {c.key}
-                                        </span>
-                                        {c.api_mode && (
-                                            <>
-                                                <span>{_t("qing|text_a9fd1ddb")}</span>
-                                                <span style={{ color: p.text }}>{statusLabel(c.api_mode)}</span>
-                                            </>
-                                        )}
-                                        {c.base_url && (
-                                            <>
-                                                <span>{_t("qing|text_52fff168")}</span>
-                                                <span style={{ color: p.text, wordBreak: "break-all" }}>
-                                                    {c.base_url}
+                                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div
+                                                style={{
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    gap: 8,
+                                                    flexWrap: "wrap",
+                                                }}
+                                            >
+                                                <span
+                                                    style={{
+                                                        font: "var(--cpd-font-body-md-semibold)",
+                                                        color: p.text,
+                                                        overflow: "hidden",
+                                                        textOverflow: "ellipsis",
+                                                        whiteSpace: "nowrap",
+                                                    }}
+                                                >
+                                                    {c.label || c.model || c.key}
                                                 </span>
-                                            </>
-                                        )}
-                                    </div>
-                                )}
-                                {editing && (
-                                    <div
-                                        onClick={(e) => e.stopPropagation()}
-                                        onKeyDown={(e) => e.stopPropagation()}
-                                        role="presentation"
-                                        style={{
-                                            marginTop: 10,
-                                            paddingTop: 10,
-                                            borderTop: `1px solid ${p.divider}`,
-                                            display: "grid",
-                                            gap: 8,
-                                        }}
-                                    >
-                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                                            <div>
-                                                <div style={{ fontSize: 11, color: p.textDim, marginBottom: 3 }}>
-                                                    {_t("qing|text_daede988")}
-                                                </div>
-                                                <input
-                                                    aria-label={_t("qing|text_daede988")}
-                                                    value={editLabelVal}
-                                                    onChange={(e) => setEditLabelVal(e.target.value)}
-                                                    style={inputStyle}
-                                                />
+                                                {active && (
+                                                    <span
+                                                        style={{
+                                                            font: "var(--cpd-font-body-xs-semibold)",
+                                                            color: p.accent,
+                                                            background: p.accentSoft,
+                                                            padding: "2px 8px",
+                                                            borderRadius: 999,
+                                                        }}
+                                                    >
+                                                        {_t("qing|text_fa48e893")}
+                                                    </span>
+                                                )}
                                             </div>
-                                            <div>
-                                                <div style={{ fontSize: 11, color: p.textDim, marginBottom: 3 }}>
-                                                    {_t("qing|text_c98e118e")}
-                                                </div>
-                                                <input
-                                                    aria-label={_t("qing|text_c98e118e")}
-                                                    value={editModelVal}
-                                                    onChange={(e) => setEditModelVal(e.target.value)}
-                                                    style={inputStyle}
-                                                />
-                                            </div>
-                                            <div>
-                                                <div style={{ fontSize: 11, color: p.textDim, marginBottom: 3 }}>
-                                                    {_t("qing|text_52fff168")}
-                                                </div>
-                                                <input
-                                                    aria-label={_t("qing|text_52fff168")}
-                                                    value={editBaseVal}
-                                                    onChange={(e) => setEditBaseVal(e.target.value)}
-                                                    style={inputStyle}
-                                                />
-                                            </div>
-                                            <div>
-                                                <div style={{ fontSize: 11, color: p.textDim, marginBottom: 3 }}>
-                                                    {_t("qing|text_3b3585b2")}
-                                                </div>
-                                                <input
-                                                    aria-label={_t("qing|text_3b3585b2")}
-                                                    value={editKeyEnvVal}
-                                                    onChange={(e) => setEditKeyEnvVal(e.target.value)}
-                                                    style={inputStyle}
-                                                />
+                                            <div
+                                                style={{
+                                                    font: "var(--cpd-font-body-sm-regular)",
+                                                    color: p.textDim,
+                                                    marginTop: 3,
+                                                    wordBreak: "break-all",
+                                                }}
+                                            >
+                                                {[c.model, c.base_url].filter(Boolean).join(" · ")}
                                             </div>
                                         </div>
-                                        <div style={{ display: "flex", gap: 8 }}>
+                                        {!active && (
                                             <Button
                                                 variant="primary"
-                                                disabled={busy === `edit:${c.key}`}
-                                                onClick={() => void saveEditCandidate(c)}
+                                                disabled={Boolean(busy)}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    void swap(c.key, c.label || c.model);
+                                                }}
                                             >
-                                                {busy === `edit:${c.key}`
-                                                    ? _t("qing|text_ff509c9b")
-                                                    : _t("qing|text_a3030bf8")}
+                                                {busy === c.key
+                                                    ? _t("qing|text_ad0196c8")
+                                                    : _t("qing|model_switch_btn")}
                                             </Button>
-                                            <Button onClick={() => setEditingKey(null)}>
-                                                {_t("qing|text_2cd0f3be")}
-                                            </Button>
-                                        </div>
+                                        )}
                                     </div>
-                                )}
-                            </Card>
-                        );
-                    })}
+                                    <div
+                                        style={{
+                                            display: "flex",
+                                            gap: 10,
+                                            marginTop: "auto",
+                                            paddingTop: 8,
+                                            borderTop: `1px solid ${p.divider}`,
+                                            font: "var(--cpd-font-body-xs-regular)",
+                                            color: p.textDim,
+                                            alignItems: "center",
+                                            flexWrap: "wrap",
+                                        }}
+                                    >
+                                        {c.key_env ? <span>{c.key_env}</span> : null}
+                                        {c.has_key === false && (
+                                            <span style={{ color: p.danger }}>{_t("qing|text_69415a73")}</span>
+                                        )}
+                                        {c.shared_endpoint && <span>{_t("qing|text_c3196258")}</span>}
+                                        <span style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (editing) setEditingKey(null);
+                                                    else startEditCandidate(c);
+                                                }}
+                                                style={{
+                                                    font: "var(--cpd-font-body-xs-regular)",
+                                                    padding: "3px 9px",
+                                                    borderRadius: 6,
+                                                    cursor: "pointer",
+                                                    border: `1px solid ${p.divider}`,
+                                                    background: "transparent",
+                                                    color: p.text,
+                                                }}
+                                            >
+                                                {editing ? _t("qing|text_2cd0f3be") : _t("qing|text_05183656")}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    void testOne(c.key);
+                                                }}
+                                                disabled={busy === `test:${c.key}`}
+                                                style={{
+                                                    font: "var(--cpd-font-body-xs-regular)",
+                                                    padding: "3px 9px",
+                                                    borderRadius: 6,
+                                                    cursor: "pointer",
+                                                    border: `1px solid ${p.divider}`,
+                                                    background: "transparent",
+                                                    color: p.textDim,
+                                                }}
+                                            >
+                                                {busy === `test:${c.key}`
+                                                    ? _t("qing|text_458748c7")
+                                                    : _t("qing|text_6aa8f49c")}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    void removeOne(c);
+                                                }}
+                                                disabled={busy === `del:${c.key}`}
+                                                style={{
+                                                    font: "var(--cpd-font-body-xs-regular)",
+                                                    padding: "3px 9px",
+                                                    borderRadius: 6,
+                                                    cursor: "pointer",
+                                                    border: `1px solid ${p.divider}`,
+                                                    background: "transparent",
+                                                    color: p.danger,
+                                                }}
+                                            >
+                                                {_t("qing|text_2f9daa82")}
+                                            </button>
+                                        </span>
+                                    </div>
+                                    {selected && !editing && (
+                                        <div
+                                            style={{
+                                                marginTop: 6,
+                                                paddingTop: 8,
+                                                borderTop: `1px solid ${p.divider}`,
+                                                font: "var(--cpd-font-body-xs-regular)",
+                                                color: p.textDim,
+                                                display: "grid",
+                                                gridTemplateColumns: "auto 1fr",
+                                                gap: "4px 12px",
+                                            }}
+                                        >
+                                            <span>{_t("qing|text_66e7500a")}</span>
+                                            <span style={{ color: p.text, fontFamily: "ui-monospace, monospace" }}>
+                                                {c.key}
+                                            </span>
+                                            {c.api_mode && (
+                                                <>
+                                                    <span>{_t("qing|text_a9fd1ddb")}</span>
+                                                    <span style={{ color: p.text }}>{statusLabel(c.api_mode)}</span>
+                                                </>
+                                            )}
+                                            {c.base_url && (
+                                                <>
+                                                    <span>{_t("qing|text_52fff168")}</span>
+                                                    <span style={{ color: p.text, wordBreak: "break-all" }}>
+                                                        {c.base_url}
+                                                    </span>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+                                    {editing && (
+                                        <div
+                                            onClick={(e) => e.stopPropagation()}
+                                            onKeyDown={(e) => e.stopPropagation()}
+                                            role="presentation"
+                                            style={{
+                                                marginTop: 6,
+                                                paddingTop: 8,
+                                                borderTop: `1px solid ${p.divider}`,
+                                                display: "grid",
+                                                gap: 8,
+                                            }}
+                                        >
+                                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                                                <div>
+                                                    <div
+                                                        style={{
+                                                            font: "var(--cpd-font-body-xs-regular)",
+                                                            color: p.textDim,
+                                                            marginBottom: 3,
+                                                        }}
+                                                    >
+                                                        {_t("qing|text_daede988")}
+                                                    </div>
+                                                    <input
+                                                        aria-label={_t("qing|text_daede988")}
+                                                        value={editLabelVal}
+                                                        onChange={(e) => setEditLabelVal(e.target.value)}
+                                                        style={inputStyle}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <div
+                                                        style={{
+                                                            font: "var(--cpd-font-body-xs-regular)",
+                                                            color: p.textDim,
+                                                            marginBottom: 3,
+                                                        }}
+                                                    >
+                                                        {_t("qing|text_c98e118e")}
+                                                    </div>
+                                                    <input
+                                                        aria-label={_t("qing|text_c98e118e")}
+                                                        value={editModelVal}
+                                                        onChange={(e) => setEditModelVal(e.target.value)}
+                                                        style={inputStyle}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <div
+                                                        style={{
+                                                            font: "var(--cpd-font-body-xs-regular)",
+                                                            color: p.textDim,
+                                                            marginBottom: 3,
+                                                        }}
+                                                    >
+                                                        {_t("qing|text_52fff168")}
+                                                    </div>
+                                                    <input
+                                                        aria-label={_t("qing|text_52fff168")}
+                                                        value={editBaseVal}
+                                                        onChange={(e) => setEditBaseVal(e.target.value)}
+                                                        style={inputStyle}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <div
+                                                        style={{
+                                                            font: "var(--cpd-font-body-xs-regular)",
+                                                            color: p.textDim,
+                                                            marginBottom: 3,
+                                                        }}
+                                                    >
+                                                        {_t("qing|text_3b3585b2")}
+                                                    </div>
+                                                    <input
+                                                        aria-label={_t("qing|text_3b3585b2")}
+                                                        value={editKeyEnvVal}
+                                                        onChange={(e) => setEditKeyEnvVal(e.target.value)}
+                                                        style={inputStyle}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div style={{ display: "flex", gap: 8 }}>
+                                                <Button
+                                                    variant="primary"
+                                                    disabled={busy === `edit:${c.key}`}
+                                                    onClick={() => void saveEditCandidate(c)}
+                                                >
+                                                    {busy === `edit:${c.key}`
+                                                        ? _t("qing|text_ff509c9b")
+                                                        : _t("qing|text_a3030bf8")}
+                                                </Button>
+                                                <Button onClick={() => setEditingKey(null)}>
+                                                    {_t("qing|text_2cd0f3be")}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </Card>
+                            );
+                        })}
+                    </div>
                 </>
 
                 {auxiliaryList.length > 0 && (
                     <>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: p.text, margin: "18px 0 8px" }}>
+                        <div
+                            style={{
+                                font: "var(--cpd-font-body-sm-semibold)",
+                                color: p.text,
+                                margin: "18px 0 8px",
+                            }}
+                        >
                             {_t("qing|model_auxiliary_title")}
                         </div>
                         <div
                             style={{
-                                borderRadius: 12,
-                                background: p.bgAlt,
-                                border: `1px solid ${p.divider}`,
-                                overflow: "hidden",
+                                display: "grid",
+                                gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+                                gap: 12,
+                                alignItems: "stretch",
                             }}
                         >
                             {auxiliaryList.map((aux, i) => (
-                                <div
+                                <Card
                                     key={aux.key || aux.model || i}
                                     style={{
+                                        height: "100%",
                                         display: "flex",
-                                        alignItems: "center",
-                                        gap: 10,
-                                        padding: "11px 14px",
-                                        borderTop: i === 0 ? "none" : `1px solid ${p.divider}`,
+                                        flexDirection: "column",
+                                        gap: 6,
                                     }}
                                 >
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ fontSize: 13, fontWeight: 600, color: p.text }}>
-                                            {aux.label || aux.key || aux.model}
-                                        </div>
-                                        <div style={{ fontSize: 11.5, color: p.textDim, marginTop: 2 }}>
-                                            {[aux.model, aux.base_url].filter(Boolean).join(" · ") || "—"}
-                                        </div>
+                                    <div style={{ font: "var(--cpd-font-body-md-semibold)", color: p.text }}>
+                                        {aux.label || aux.key || aux.model}
                                     </div>
-                                    <Button onClick={() => setConfigure(true)}>{_t("qing|text_05183656")}</Button>
-                                </div>
+                                    <div
+                                        style={{
+                                            font: "var(--cpd-font-body-sm-regular)",
+                                            color: p.textDim,
+                                            wordBreak: "break-all",
+                                        }}
+                                    >
+                                        {[aux.model, aux.base_url].filter(Boolean).join(" · ") || "—"}
+                                    </div>
+                                    <div
+                                        style={{
+                                            marginTop: "auto",
+                                            paddingTop: 8,
+                                            borderTop: `1px solid ${p.divider}`,
+                                            display: "flex",
+                                            justifyContent: "flex-end",
+                                        }}
+                                    >
+                                        <Button onClick={() => setConfigure(true)}>{_t("qing|text_05183656")}</Button>
+                                    </div>
+                                </Card>
                             ))}
                         </div>
                     </>
                 )}
 
-                {Array.isArray(data?.fallback) && data.fallback.length > 0 && (
-                    <>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: p.text, margin: "18px 0 8px" }}>
-                            {_t("qing|text_f40bbf98")}
+                <div style={{ display: "flex", alignItems: "center", margin: "18px 0 8px" }}>
+                    <span style={{ font: "var(--cpd-font-body-sm-semibold)", color: p.text }}>
+                        {_t("qing|text_f40bbf98")}
+                    </span>
+                    <span style={{ marginLeft: "auto" }}>
+                        <Button onClick={() => (editingFallback ? setEditingFallback(false) : startEditFallback())}>
+                            {editingFallback ? _t("qing|text_2cd0f3be") : _t("qing|text_d75d9516")}
+                        </Button>
+                    </span>
+                </div>
+
+                {editingFallback ? (
+                    <Card style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                        <div style={{ font: "var(--cpd-font-body-xs-regular)", color: p.textDim }}>
+                            {_t("qing|fallback_list_hint")}
                         </div>
-                        <div
-                            style={{
-                                borderRadius: 12,
-                                background: p.bgAlt,
-                                border: `1px solid ${p.divider}`,
-                                overflow: "hidden",
-                            }}
-                        >
-                            {data.fallback.map((f: any, i: number) => (
+                        {fallbackDraft.length === 0 ? (
+                            <div style={{ font: "var(--cpd-font-body-sm-regular)", color: p.textDim }}>
+                                {_t("qing|fallback_empty_chain")}
+                            </div>
+                        ) : (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                {fallbackDraft.map((item, i) => (
+                                    <div
+                                        key={`${item.key}:${item.model}:${item.base_url}`}
+                                        style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: 10,
+                                            padding: "10px 12px",
+                                            borderRadius: 8,
+                                            border: `1px solid ${p.divider}`,
+                                            background: p.bg,
+                                        }}
+                                    >
+                                        <span
+                                            style={{
+                                                width: 22,
+                                                height: 22,
+                                                borderRadius: 6,
+                                                background: p.accentSoft,
+                                                color: p.accent,
+                                                font: "var(--cpd-font-body-xs-semibold)",
+                                                display: "inline-flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                flexShrink: 0,
+                                            }}
+                                        >
+                                            {i + 1}
+                                        </span>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div
+                                                style={{
+                                                    font: "var(--cpd-font-body-md-semibold)",
+                                                    color: p.text,
+                                                }}
+                                            >
+                                                {item.label || item.model}
+                                            </div>
+                                            <div
+                                                style={{
+                                                    font: "var(--cpd-font-body-xs-regular)",
+                                                    color: p.textDim,
+                                                    wordBreak: "break-all",
+                                                }}
+                                            >
+                                                {[item.model, item.base_url].filter(Boolean).join(" · ")}
+                                            </div>
+                                        </div>
+                                        <div style={{ display: "flex", gap: 6 }}>
+                                            <Button
+                                                disabled={busy === "fallback" || i === 0}
+                                                aria-label={_t("qing|text_f853a70b")}
+                                                onClick={() => moveFallbackDraft(i, -1)}
+                                            >
+                                                ↑
+                                            </Button>
+                                            <Button
+                                                disabled={busy === "fallback" || i === fallbackDraft.length - 1}
+                                                aria-label={_t("qing|text_e75e8b4e")}
+                                                onClick={() => moveFallbackDraft(i, 1)}
+                                            >
+                                                ↓
+                                            </Button>
+                                            <Button
+                                                disabled={busy === "fallback"}
+                                                onClick={() =>
+                                                    setFallbackDraft((prev) => prev.filter((_, idx) => idx !== i))
+                                                }
+                                            >
+                                                {_t("qing|text_2f9daa82")}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {candidates.length > 0 && (
+                            <>
+                                <div style={{ font: "var(--cpd-font-body-sm-semibold)", color: p.text }}>
+                                    {_t("qing|fallback_pick_candidates")}
+                                </div>
                                 <div
-                                    key={typeof f === "string" ? f : f.key || f.model || i}
                                     style={{
-                                        fontSize: 12.5,
-                                        color: p.text,
-                                        padding: "10px 14px",
-                                        borderTop: i === 0 ? "none" : `1px solid ${p.divider}`,
+                                        display: "grid",
+                                        gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+                                        gap: 8,
                                     }}
                                 >
-                                    <span style={{ color: p.textDim, marginRight: 8 }}>{i + 1}.</span>
-                                    {typeof f === "string" ? f : f.label || f.model || f.key || JSON.stringify(f)}
+                                    {candidates.map((c) => {
+                                        const cid = c.key || c.model;
+                                        const checked = fallbackDraft.some(
+                                            (item) =>
+                                                item.key === cid ||
+                                                (item.model === c.model && item.base_url === c.base_url),
+                                        );
+                                        return (
+                                            <label
+                                                key={cid}
+                                                aria-label={c.label || c.model || cid}
+                                                style={{
+                                                    display: "flex",
+                                                    alignItems: "flex-start",
+                                                    gap: 8,
+                                                    padding: "8px 10px",
+                                                    borderRadius: 8,
+                                                    border: `1px solid ${p.divider}`,
+                                                    background: p.bg,
+                                                    cursor: "pointer",
+                                                }}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={checked}
+                                                    disabled={busy === "fallback"}
+                                                    onChange={() => toggleFallbackCandidate(c)}
+                                                />
+                                                <div style={{ minWidth: 0 }}>
+                                                    <div
+                                                        style={{
+                                                            font: "var(--cpd-font-body-sm-semibold)",
+                                                            color: p.text,
+                                                        }}
+                                                    >
+                                                        {c.label || c.model || cid}
+                                                    </div>
+                                                    <div
+                                                        style={{
+                                                            font: "var(--cpd-font-body-xs-regular)",
+                                                            color: p.textDim,
+                                                            wordBreak: "break-all",
+                                                        }}
+                                                    >
+                                                        {[c.model, c.base_url].filter(Boolean).join(" · ")}
+                                                    </div>
+                                                </div>
+                                            </label>
+                                        );
+                                    })}
                                 </div>
-                            ))}
+                            </>
+                        )}
+                        <div style={{ display: "flex", gap: 8 }}>
+                            <Button
+                                variant="primary"
+                                disabled={busy === "fallback"}
+                                onClick={() => void saveFallbackDraft()}
+                            >
+                                {busy === "fallback" ? _t("qing|text_ff509c9b") : _t("qing|text_a3030bf8")}
+                            </Button>
+                            <Button onClick={() => setEditingFallback(false)}>{_t("qing|text_2cd0f3be")}</Button>
                         </div>
-                    </>
+                    </Card>
+                ) : Array.isArray(data?.fallback) && data.fallback.length > 0 ? (
+                    <div
+                        style={{
+                            borderRadius: 12,
+                            background: p.bgAlt,
+                            border: `1px solid ${p.divider}`,
+                            overflow: "hidden",
+                        }}
+                    >
+                        {data.fallback.map((f: any, i: number) => (
+                            <div
+                                key={typeof f === "string" ? f : f.key || f.model || i}
+                                style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 8,
+                                    font: "var(--cpd-font-body-sm-regular)",
+                                    color: p.text,
+                                    padding: "10px 14px",
+                                    borderTop: i === 0 ? "none" : `1px solid ${p.divider}`,
+                                }}
+                            >
+                                <span style={{ font: "var(--cpd-font-body-xs-semibold)", color: p.textDim }}>
+                                    {i + 1}.
+                                </span>
+                                <span>
+                                    {typeof f === "string" ? f : f.label || f.model || f.key || JSON.stringify(f)}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div style={{ font: "var(--cpd-font-body-sm-regular)", color: p.textDim }}>
+                        {_t("qing|fallback_empty_chain")}
+                    </div>
                 )}
             </Scroll>
         </>

@@ -279,13 +279,22 @@ describe("Qing collection workflows", () => {
         );
     });
 
-    it("resolves fallback identifiers to model endpoint records", async () => {
+    it("edits fallback chain via candidate selection, reordering, and saving", async () => {
         vi.mocked(hub.agentBundle).mockResolvedValue({
-            candidates: [{ key: "backup", model: "small", base_url: "https://api.example/", key_env: "KEY" }],
+            candidates: [
+                { key: "backup", model: "small", base_url: "https://api.example/", key_env: "KEY" },
+                { key: "second", model: "medium", base_url: "https://api2.example/", key_env: "KEY2" },
+            ],
+            fallback: [{ key: "second", model: "medium", base_url: "https://api2.example/", key_env: "KEY2" }],
         });
         const vm = await open("models");
         vm.toolbar("fallback");
-        vm.setField("chain", "backup");
+        expect(vm.getSnapshot().fallbackEditor?.items).toHaveLength(1);
+        vm.toggleFallbackCandidate("backup");
+        expect(vm.getSnapshot().fallbackEditor?.items.map((i) => i.id)).toEqual(["second", "backup"]);
+        vm.moveFallbackItem(1, -1);
+        expect(vm.getSnapshot().fallbackEditor?.items.map((i) => i.id)).toEqual(["backup", "second"]);
+        vm.removeFallbackItem(1);
         vm.save();
         await vi.waitFor(() =>
             expect(hub.saveFallback).toHaveBeenCalledWith("office", [

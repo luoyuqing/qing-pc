@@ -4598,6 +4598,10 @@
         "diag_fix_timeout": "建议：检查 device-hub 服务是否繁忙或网络延迟过高",
         "diag_fix_key": "建议：前往「凭据」检查对应 API 密钥是否已配置",
         "diag_fix_network": "建议：检查 device-hub 地址与网络连接是否可达",
-        "diag_fix_generic": "建议：刷新重试，或查看服务端日志排查"
+        "diag_fix_generic": "建议：刷新重试，或查看服务端日志排查",
+        "fallback_list_hint": "从候选池勾选或调整顺序；主模型不可用时按此顺序依次降级。",
+        "fallback_pick_candidates": "从候选模型添加 / 勾选",
+        "fallback_empty_chain": "未配置备用链（当前不自动降级）",
+        "device_revoke_confirm": "确认撤销设备「%(v0)s」的访问令牌？撤销后该设备将无法继续连接，此操作不可恢复。"
     }
 }

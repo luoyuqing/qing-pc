@@ -39,6 +39,42 @@ export interface QingCollectionField {
     hint?: string;
 }
 
+/** An item in the ordered fallback chain editor. */
+export interface FallbackChainItem {
+    id: string;
+    label: string;
+    model: string;
+    baseUrl: string;
+    provider: string;
+    keyEnv: string;
+}
+
+/** A candidate model that can be toggled into the fallback chain. */
+export interface FallbackCandidateOption {
+    id: string;
+    label: string;
+    model: string;
+    baseUrl: string;
+    provider: string;
+    keyEnv: string;
+    inChain: boolean;
+}
+
+/** State for the list-based fallback chain editor. */
+export interface FallbackEditorState {
+    items: FallbackChainItem[];
+    candidates: FallbackCandidateOption[];
+    hint: string;
+    labels: {
+        chainTitle: string;
+        candidatesTitle: string;
+        emptyChain: string;
+        moveUp: string;
+        moveDown: string;
+        remove: string;
+    };
+}
+
 /** Snapshot for server-backed collections and their editors. */
 export interface QingCollectionViewSnapshot {
     title: string;
@@ -51,6 +87,7 @@ export interface QingCollectionViewSnapshot {
     searchable: boolean;
     rows: QingCollectionRow[];
     fields: QingCollectionField[];
+    fallbackEditor?: FallbackEditorState;
     toolbar: QingCollectionAction[];
     editing: boolean;
     confirmation: string;
@@ -84,6 +121,10 @@ export interface QingCollectionViewActions {
     toolbar: (action: string) => void;
     save: () => void;
     confirm: (accepted: boolean) => void;
+    toggleFallbackCandidate?: (id: string) => void;
+    moveFallbackItem?: (index: number, delta: -1 | 1) => void;
+    removeFallbackItem?: (index: number) => void;
+    cancelEdit?: () => void;
 }
 
 /** Contract implemented by resource-specific view models. */
@@ -172,68 +213,176 @@ export function QingCollectionView({ vm }: Readonly<Props>): JSX.Element {
                     <Text role="status">{labels.loading}</Text>
                 ) : (
                     <>
-                        {editing && (
-                            <form
-                                className={styles.form}
-                                onSubmit={(event) => {
-                                    event.preventDefault();
-                                    vm.save();
-                                }}
-                            >
-                                {fields.map((field) => (
-                                    <label key={field.id} className={styles.field}>
-                                        <Text as="span" weight="medium">
-                                            {field.label}
-                                        </Text>
-                                        {field.type === "textarea" ? (
-                                            <textarea
-                                                className={styles.input}
-                                                value={field.value}
-                                                disabled={busy}
-                                                onChange={(event) => vm.setField(field.id, event.target.value)}
-                                            />
-                                        ) : field.type === "select" ? (
-                                            <select
-                                                className={styles.input}
-                                                value={field.value}
-                                                disabled={busy}
-                                                onChange={(event) => vm.setField(field.id, event.target.value)}
+                        {snapshot.fallbackEditor ? (
+                            <div className={styles.fallbackSection}>
+                                <Text size="sm" weight="semibold">
+                                    {snapshot.fallbackEditor.labels.chainTitle}
+                                </Text>
+                                <Text size="xs" className={styles.meta}>
+                                    {snapshot.fallbackEditor.hint}
+                                </Text>
+                                {snapshot.fallbackEditor.items.length === 0 ? (
+                                    <Text size="sm" className={styles.hint}>
+                                        {snapshot.fallbackEditor.labels.emptyChain}
+                                    </Text>
+                                ) : (
+                                    <div className={styles.fallbackList}>
+                                        {snapshot.fallbackEditor.items.map((item, idx) => (
+                                            <div
+                                                key={`${item.id}:${item.model}:${item.baseUrl}`}
+                                                className={styles.fallbackItem}
                                             >
-                                                {field.options?.map((option) => (
-                                                    <option key={option.value} value={option.value}>
-                                                        {option.label}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        ) : field.type === "checkbox" ? (
-                                            <input
-                                                type="checkbox"
-                                                checked={field.value === "true"}
-                                                disabled={busy}
-                                                onChange={(event) =>
-                                                    vm.setField(field.id, String(event.target.checked))
-                                                }
-                                            />
-                                        ) : (
-                                            <input
-                                                className={styles.input}
-                                                type={field.type ?? "text"}
-                                                value={field.value}
-                                                disabled={busy}
-                                                onChange={(event) => vm.setField(field.id, event.target.value)}
-                                            />
-                                        )}
-                                        {field.hint && (
-                                            <Text as="span" className={styles.hint}>
-                                                {field.hint}
+                                                <span className={styles.fallbackIndex}>{idx + 1}</span>
+                                                <div className={styles.fallbackInfo}>
+                                                    <Text size="md" weight="semibold">
+                                                        {item.label || item.model}
+                                                    </Text>
+                                                    <Text size="xs" className={styles.meta}>
+                                                        {[item.model, item.baseUrl].filter(Boolean).join(" · ")}
+                                                    </Text>
+                                                </div>
+                                                <Flex gap="var(--cpd-space-1x)">
+                                                    <Button
+                                                        kind="secondary"
+                                                        size="md"
+                                                        disabled={busy || idx === 0}
+                                                        aria-label={snapshot.fallbackEditor?.labels.moveUp}
+                                                        onClick={() => vm.moveFallbackItem?.(idx, -1)}
+                                                    >
+                                                        ↑
+                                                    </Button>
+                                                    <Button
+                                                        kind="secondary"
+                                                        size="md"
+                                                        disabled={
+                                                            busy ||
+                                                            idx === (snapshot.fallbackEditor?.items.length ?? 0) - 1
+                                                        }
+                                                        aria-label={snapshot.fallbackEditor?.labels.moveDown}
+                                                        onClick={() => vm.moveFallbackItem?.(idx, 1)}
+                                                    >
+                                                        ↓
+                                                    </Button>
+                                                    <Button
+                                                        kind="secondary"
+                                                        size="md"
+                                                        destructive
+                                                        disabled={busy}
+                                                        onClick={() => vm.removeFallbackItem?.(idx)}
+                                                    >
+                                                        {snapshot.fallbackEditor?.labels.remove}
+                                                    </Button>
+                                                </Flex>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {snapshot.fallbackEditor.candidates.length > 0 && (
+                                    <>
+                                        <Text size="sm" weight="semibold">
+                                            {snapshot.fallbackEditor.labels.candidatesTitle}
+                                        </Text>
+                                        <div className={styles.fallbackCandidates}>
+                                            {snapshot.fallbackEditor.candidates.map((cand) => (
+                                                <label
+                                                    key={cand.id}
+                                                    aria-label={cand.label || cand.model || cand.id}
+                                                    className={styles.fallbackCandidate}
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={cand.inChain}
+                                                        disabled={busy}
+                                                        onChange={() => vm.toggleFallbackCandidate?.(cand.id)}
+                                                    />
+                                                    <div className={styles.fallbackInfo}>
+                                                        <Text size="sm" weight="semibold">
+                                                            {cand.label || cand.model || cand.id}
+                                                        </Text>
+                                                        <Text size="xs" className={styles.meta}>
+                                                            {[cand.model, cand.baseUrl].filter(Boolean).join(" · ")}
+                                                        </Text>
+                                                    </div>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
+                                <Flex gap="var(--cpd-space-2x)">
+                                    <Button kind="primary" disabled={busy} onClick={vm.save}>
+                                        {busy ? labels.loading : labels.save}
+                                    </Button>
+                                    {vm.cancelEdit && (
+                                        <Button kind="secondary" disabled={busy} onClick={vm.cancelEdit}>
+                                            {labels.cancel}
+                                        </Button>
+                                    )}
+                                </Flex>
+                            </div>
+                        ) : (
+                            editing && (
+                                <form
+                                    className={styles.form}
+                                    onSubmit={(event) => {
+                                        event.preventDefault();
+                                        vm.save();
+                                    }}
+                                >
+                                    {fields.map((field) => (
+                                        <label key={field.id} className={styles.field}>
+                                            <Text as="span" size="sm" weight="medium">
+                                                {field.label}
                                             </Text>
-                                        )}
-                                    </label>
-                                ))}
-                                <Button type="submit" kind="primary" disabled={busy}>
-                                    {busy ? labels.loading : labels.save}
-                                </Button>
-                            </form>
+                                            {field.type === "textarea" ? (
+                                                <textarea
+                                                    className={styles.input}
+                                                    value={field.value}
+                                                    disabled={busy}
+                                                    onChange={(event) => vm.setField(field.id, event.target.value)}
+                                                />
+                                            ) : field.type === "select" ? (
+                                                <select
+                                                    className={styles.input}
+                                                    value={field.value}
+                                                    disabled={busy}
+                                                    onChange={(event) => vm.setField(field.id, event.target.value)}
+                                                >
+                                                    {field.options?.map((option) => (
+                                                        <option key={option.value} value={option.value}>
+                                                            {option.label}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            ) : field.type === "checkbox" ? (
+                                                <input
+                                                    type="checkbox"
+                                                    checked={field.value === "true"}
+                                                    disabled={busy}
+                                                    onChange={(event) =>
+                                                        vm.setField(field.id, String(event.target.checked))
+                                                    }
+                                                />
+                                            ) : (
+                                                <input
+                                                    className={styles.input}
+                                                    type={field.type ?? "text"}
+                                                    value={field.value}
+                                                    disabled={busy}
+                                                    onChange={(event) => vm.setField(field.id, event.target.value)}
+                                                />
+                                            )}
+                                            {field.hint && (
+                                                <Text as="span" size="xs" className={styles.meta}>
+                                                    {field.hint}
+                                                </Text>
+                                            )}
+                                        </label>
+                                    ))}
+                                    <Button type="submit" kind="primary" disabled={busy}>
+                                        {busy ? labels.loading : labels.save}
+                                    </Button>
+                                </form>
+                            )
                         )}
                         {snapshot.result && (
                             <div className={styles.resultBox}>
@@ -249,14 +398,19 @@ export function QingCollectionView({ vm }: Readonly<Props>): JSX.Element {
                                 </Flex>
                             </div>
                         )}
-                        {!editing && rows.length === 0 && !snapshot.result && <Text>{labels.empty}</Text>}
-                        <Flex direction="column" gap="var(--cpd-space-3x)">
+                        {!editing && rows.length === 0 && !snapshot.result && <Text size="sm">{labels.empty}</Text>}
+                        <div className={styles.rows}>
                             {rows.map((row) => (
                                 <article key={row.id} className={styles.row}>
-                                    <Flex align="center" justify="space-between" gap="var(--cpd-space-2x)" wrap="wrap">
-                                        <Heading as="h2" size="sm">
+                                    <Flex
+                                        className={styles.rowHeader}
+                                        align="center"
+                                        justify="space-between"
+                                        gap="var(--cpd-space-2x)"
+                                    >
+                                        <Text as="h2" size="md" weight="semibold" className={styles.rowTitle}>
                                             {row.title}
-                                        </Heading>
+                                        </Text>
                                         {row.badge && (
                                             <span
                                                 className={`${styles.badge} ${
@@ -271,14 +425,23 @@ export function QingCollectionView({ vm }: Readonly<Props>): JSX.Element {
                                             </span>
                                         )}
                                     </Flex>
-                                    {row.description && <Text className={styles.hint}>{row.description}</Text>}
-                                    {row.meta && <Text className={styles.meta}>{row.meta}</Text>}
+                                    {row.description && (
+                                        <Text size="sm" className={styles.rowBody}>
+                                            {row.description}
+                                        </Text>
+                                    )}
+                                    {row.meta && (
+                                        <Text size="xs" className={styles.meta}>
+                                            {row.meta}
+                                        </Text>
+                                    )}
                                     {row.actions.length > 0 && (
                                         <Flex gap="var(--cpd-space-2x)" wrap="wrap" className={styles.actions}>
                                             {row.actions.map((action) => (
                                                 <Button
                                                     key={action.id}
                                                     kind="secondary"
+                                                    size="md"
                                                     destructive={action.danger}
                                                     disabled={busy}
                                                     onClick={() => vm.activate(row.id, action.id)}
@@ -290,7 +453,7 @@ export function QingCollectionView({ vm }: Readonly<Props>): JSX.Element {
                                     )}
                                 </article>
                             ))}
-                        </Flex>
+                        </div>
                     </>
                 )}
             </section>

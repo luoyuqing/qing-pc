@@ -13,13 +13,79 @@ Qing PC · 记忆
 */
 
 import { _t } from "../../languageHandler";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { confirmAction } from "../dialogs";
 import { QingPanel } from "../QingPanel";
 import { HubError, hub } from "../hub";
 import { PersonaPicker, invalidatePersonaCache } from "../PersonaPicker";
 import { Button, Card, Empty, ErrorBox, Loading, PageHeader, Scroll } from "../ui";
 import { palette } from "../theme";
+import { recordOf, textOf } from "../data";
+
+interface MemoryEntryCard {
+    id: string;
+    title: string;
+    summary: string;
+    time?: string;
+}
+
+function parseMemoryEntries(markdown: string): MemoryEntryCard[] {
+    const trimmed = markdown.trim();
+    if (!trimmed) return [];
+    const lines = trimmed.split(/\r?\n/);
+    const sections: { heading: string; body: string[] }[] = [];
+    let current: { heading: string; body: string[] } | null = null;
+
+    for (const line of lines) {
+        const h2 = /^##+\s+(.+)$/.exec(line);
+        if (h2) {
+            if (current && (current.body.join("").trim() || !current.heading.startsWith("# "))) {
+                sections.push(current);
+            }
+            current = { heading: h2[1].trim(), body: [] };
+            continue;
+        }
+        if (/^#\s+/.test(line) && !current) {
+            continue;
+        }
+        if (!current) current = { heading: "", body: [] };
+        current.body.push(line);
+    }
+    if (current && (current.heading || current.body.join("").trim())) {
+        sections.push(current);
+    }
+
+    if (sections.length === 0) {
+        return trimmed
+            .split(/\n{2,}/)
+            .map((chunk, idx) => {
+                const clean = chunk.replace(/^[-*#>\s]+/gm, "").trim();
+                return {
+                    id: `mem-${idx}`,
+                    title: clean.slice(0, 32) || _t("qing|text_7a6335b3"),
+                    summary: clean,
+                };
+            })
+            .filter((item) => item.summary);
+    }
+
+    return sections
+        .map((sec, idx): MemoryEntryCard | null => {
+            const dateMatch = /^(\d{4}[-/]\d{1,2}[-/]\d{1,2}(?:\s+\d{1,2}:\d{2})?)\s*(.*)$/.exec(sec.heading);
+            const time = dateMatch ? dateMatch[1] : undefined;
+            const rawTitle = (dateMatch ? dateMatch[2] : sec.heading).trim();
+            const summary = sec.body
+                .join(" ")
+                .replace(/`([^`]+)`/g, "$1")
+                .replace(/\*\*([^*]+)\*\*/g, "$1")
+                .replace(/^[-*>]\s+/gm, "")
+                .replace(/\s+/g, " ")
+                .trim();
+            if (!rawTitle && !summary) return null;
+            return { id: `mem-${idx}`, title: rawTitle || _t("qing|text_7a6335b3"), summary, time };
+        })
+        .filter((item): item is MemoryEntryCard => item !== null);
+}
 
 type Tab = "memory" | "profile" | "skills" | "persona";
 
@@ -99,8 +165,59 @@ export const MemoryPage: React.FC<{ onBack?: () => void; initialPersona?: string
     const [personaData, setPersonaData] = useState<any>(null);
     const [personaKey, setPersonaKey] = useState<string | null>(null);
     const [personaText, setPersonaText] = useState("");
+    const [memoryQuery, setMemoryQuery] = useState("");
+    const [editingRawMemory, setEditingRawMemory] = useState(false);
+    const [copiedRaw, setCopiedRaw] = useState(false);
+    const [indexSummary, setIndexSummary] = useState<{ text: string; raw: string } | null>(null);
+    const [copiedIndexRaw, setCopiedIndexRaw] = useState(false);
 
     const p = palette();
+
+    const memoryEntries = useMemo(() => {
+        const all = parseMemoryEntries(memoryText);
+        const q = memoryQuery.trim().toLowerCase();
+        if (!q) return all;
+        return all.filter(
+            (e) =>
+                e.title.toLowerCase().includes(q) ||
+                e.summary.toLowerCase().includes(q) ||
+                (e.time ?? "").toLowerCase().includes(q),
+        );
+    }, [memoryText, memoryQuery]);
+
+    const checkIndexStatus = async (): Promise<void> => {
+        try {
+            const raw = await hub.memoryVaultStatus(persona);
+            const status = recordOf(raw);
+            const parts: string[] = [status.ok === false ? _t("qing|vault_index_warn") : _t("qing|vault_index_ok")];
+            if (status.coverage !== undefined) {
+                parts.push(_t("qing|vault_coverage", { v0: `${textOf(status.coverage)}%` }));
+            }
+            if (status.files !== undefined && status.total !== undefined) {
+                parts.push(_t("qing|vault_files", { v0: textOf(status.files), v1: textOf(status.total) }));
+            }
+            if (status.entities !== undefined) {
+                parts.push(_t("qing|vault_entities", { v0: textOf(status.entities) }));
+            }
+            if (status.pending !== undefined) {
+                parts.push(_t("qing|vault_pending", { v0: textOf(status.pending) }));
+            }
+            if (status.failed !== undefined) {
+                parts.push(_t("qing|vault_failed", { v0: textOf(status.failed) }));
+            }
+            setIndexSummary({ text: parts.join(" · "), raw: JSON.stringify(raw, null, 2) });
+        } catch (e) {
+            setError(_t("qing|text_2e9c15dc", { v0: (e as Error).message }));
+        }
+    };
+
+    const copyText = (text: string, onDone: (v: boolean) => void): void => {
+        if (!text || !navigator.clipboard?.writeText) return;
+        void navigator.clipboard.writeText(text).then(() => {
+            onDone(true);
+            setTimeout(() => onDone(false), 1800);
+        });
+    };
 
     const load = useCallback(async () => {
         const id = ++requestId.current;
@@ -283,15 +400,156 @@ export const MemoryPage: React.FC<{ onBack?: () => void; initialPersona?: string
 
             <Scroll>
                 {tab === "memory" && (
-                    <TextEditor
-                        title={_t("qing|text_7a6335b3")}
-                        hint={_t("qing|text_cd0af8b6")}
-                        value={memoryText}
-                        onChange={setMemoryText}
-                        onSave={() => void save("memory")}
-                        saving={saving}
-                        saved={savedMsg}
-                    />
+                    <>
+                        {editingRawMemory ? (
+                            <>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                                    <Button onClick={() => setEditingRawMemory(false)}>
+                                        {_t("qing|text_3534cbca")}
+                                    </Button>
+                                    <span style={{ font: "var(--cpd-font-body-xs-regular)", color: p.textDim }}>
+                                        {_t("qing|text_cd0af8b6")}
+                                    </span>
+                                </div>
+                                <TextEditor
+                                    title={_t("qing|text_7a6335b3")}
+                                    hint={_t("qing|text_cd0af8b6")}
+                                    value={memoryText}
+                                    onChange={setMemoryText}
+                                    onSave={() => void save("memory")}
+                                    saving={saving}
+                                    saved={savedMsg}
+                                />
+                            </>
+                        ) : (
+                            <>
+                                <div
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 8,
+                                        marginBottom: 12,
+                                        flexWrap: "wrap",
+                                    }}
+                                >
+                                    <input
+                                        type="search"
+                                        aria-label={_t("qing|text_44ce7ae9")}
+                                        placeholder={_t("qing|text_44ce7ae9")}
+                                        value={memoryQuery}
+                                        onChange={(e) => setMemoryQuery(e.target.value)}
+                                        style={{
+                                            flex: 1,
+                                            minWidth: 180,
+                                            padding: "7px 12px",
+                                            font: "var(--cpd-font-body-sm-regular)",
+                                            borderRadius: 8,
+                                            border: `1px solid ${p.divider}`,
+                                            background: p.bgAlt,
+                                            color: p.text,
+                                            outline: "none",
+                                        }}
+                                    />
+                                    <Button onClick={() => void load()}>{_t("qing|text_aee88743")}</Button>
+                                    <Button onClick={() => void checkIndexStatus()}>{_t("qing|text_11676e8a")}</Button>
+                                    <Button disabled={!memoryText} onClick={() => copyText(memoryText, setCopiedRaw)}>
+                                        {copiedRaw ? _t("qing|copied") : _t("qing|copy_raw")}
+                                    </Button>
+                                    <Button onClick={() => setEditingRawMemory(true)}>
+                                        {_t("qing|text_05183656")}
+                                    </Button>
+                                </div>
+
+                                {indexSummary && (
+                                    <Card style={{ marginBottom: 12 }}>
+                                        <div
+                                            style={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "space-between",
+                                                gap: 10,
+                                                flexWrap: "wrap",
+                                            }}
+                                        >
+                                            <span
+                                                style={{
+                                                    font: "var(--cpd-font-body-sm-regular)",
+                                                    color: p.text,
+                                                }}
+                                            >
+                                                {indexSummary.text}
+                                            </span>
+                                            <Button onClick={() => copyText(indexSummary.raw, setCopiedIndexRaw)}>
+                                                {copiedIndexRaw ? _t("qing|copied") : _t("qing|copy_raw")}
+                                            </Button>
+                                        </div>
+                                    </Card>
+                                )}
+
+                                {memoryEntries.length === 0 ? (
+                                    <Empty text={_t("qing|text_70a40a53")} />
+                                ) : (
+                                    <div
+                                        style={{
+                                            display: "grid",
+                                            gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+                                            gap: 12,
+                                            alignItems: "stretch",
+                                        }}
+                                    >
+                                        {memoryEntries.map((entry) => (
+                                            <Card
+                                                key={entry.id}
+                                                style={{
+                                                    height: "100%",
+                                                    display: "flex",
+                                                    flexDirection: "column",
+                                                    gap: 6,
+                                                }}
+                                            >
+                                                <div
+                                                    style={{
+                                                        font: "var(--cpd-font-body-md-semibold)",
+                                                        color: p.text,
+                                                        overflow: "hidden",
+                                                        textOverflow: "ellipsis",
+                                                        whiteSpace: "nowrap",
+                                                    }}
+                                                >
+                                                    {entry.title}
+                                                </div>
+                                                <div
+                                                    style={{
+                                                        font: "var(--cpd-font-body-sm-regular)",
+                                                        color: p.textDim,
+                                                        flex: 1,
+                                                        display: "-webkit-box",
+                                                        WebkitLineClamp: 3,
+                                                        WebkitBoxOrient: "vertical",
+                                                        overflow: "hidden",
+                                                    }}
+                                                >
+                                                    {entry.summary || "—"}
+                                                </div>
+                                                {entry.time && (
+                                                    <div
+                                                        style={{
+                                                            font: "var(--cpd-font-body-xs-regular)",
+                                                            color: p.textDim,
+                                                            paddingTop: 6,
+                                                            borderTop: `1px solid ${p.divider}`,
+                                                        }}
+                                                    >
+                                                        {entry.time}
+                                                    </div>
+                                                )}
+                                            </Card>
+                                        ))}
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </>
                 )}
 
                 {tab === "profile" && (

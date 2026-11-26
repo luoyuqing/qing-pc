@@ -8,6 +8,9 @@ Please see LICENSE in the repository root for full details.
 import { _t } from "../../languageHandler";
 import {
     BaseViewModel,
+    type FallbackCandidateOption,
+    type FallbackChainItem,
+    type FallbackEditorState,
     type QingCollectionViewSnapshot,
     type QingCollectionViewModel as ViewModelContract,
     type QingCollectionField,
@@ -146,8 +149,9 @@ export class QingCollectionViewModel
         const item = this.records.find((record) => this.idOf(record) === id);
         if (!item) return;
         if (action === "delete" || action === "revoke") {
+            const title = textOf(item.title ?? item.label ?? item.name ?? item.id) || _t("qing|item_default");
             this.ask(
-                action === "revoke" ? _t("qing|text_a7c9a1bc") : _t("qing|text_e53f55a8"),
+                action === "revoke" ? _t("qing|device_revoke_confirm", { v0: title }) : _t("qing|text_e53f55a8"),
                 () =>
                     void this.perform(async () => {
                         if (this.props.resource === "devices") await hub.revokeDevice(id);
@@ -289,16 +293,7 @@ export class QingCollectionViewModel
             this.showRows();
         } else if (action === "fallback") {
             this.operation = "fallback";
-            const chain = recordsOf(this.modelData.fallback);
-            this.edit({ chain: chain.map((row) => textOf(row.key) || textOf(row.model)).join("\n") }, [
-                {
-                    id: "chain",
-                    label: _t("qing|text_2cabe54a"),
-                    value: "",
-                    type: "textarea",
-                    hint: _t("qing|text_f0be13e3"),
-                },
-            ]);
+            this.openFallbackEditor();
         } else if (action === "test-model") {
             void this.perform(async () =>
                 this.snapshot.merge({
@@ -363,11 +358,119 @@ export class QingCollectionViewModel
                 notice: _t("qing|text_1bd91a7d"),
                 editing: resource === "routine",
                 fields: resource === "routine" ? this.snapshot.current.fields : [],
+                fallbackEditor: undefined,
                 result: "",
             });
             await this.load();
         });
     };
+
+    public cancelEdit = (): void => {
+        this.dirty = false;
+        this.operation = "";
+        this.snapshot.merge({
+            editing: false,
+            fields: [],
+            fallbackEditor: undefined,
+            error: "",
+        });
+        this.showRows();
+    };
+
+    public toggleFallbackCandidate = (id: string): void => {
+        const editor = this.snapshot.current.fallbackEditor;
+        if (!editor) return;
+        const cand = editor.candidates.find((c) => c.id === id);
+        if (!cand) return;
+        const existsIdx = editor.items.findIndex(
+            (item) => item.id === cand.id || (item.model === cand.model && item.baseUrl === cand.baseUrl),
+        );
+        const nextItems =
+            existsIdx >= 0
+                ? editor.items.filter((_, idx) => idx !== existsIdx)
+                : [
+                      ...editor.items,
+                      {
+                          id: cand.id,
+                          label: cand.label,
+                          model: cand.model,
+                          baseUrl: cand.baseUrl,
+                          provider: cand.provider,
+                          keyEnv: cand.keyEnv,
+                      },
+                  ];
+        this.updateFallbackEditor(nextItems);
+    };
+
+    public moveFallbackItem = (index: number, delta: -1 | 1): void => {
+        const editor = this.snapshot.current.fallbackEditor;
+        if (!editor) return;
+        const nextIndex = index + delta;
+        if (nextIndex < 0 || nextIndex >= editor.items.length) return;
+        const nextItems = [...editor.items];
+        [nextItems[index], nextItems[nextIndex]] = [nextItems[nextIndex], nextItems[index]];
+        this.updateFallbackEditor(nextItems);
+    };
+
+    public removeFallbackItem = (index: number): void => {
+        const editor = this.snapshot.current.fallbackEditor;
+        if (!editor) return;
+        this.updateFallbackEditor(editor.items.filter((_, idx) => idx !== index));
+    };
+
+    private openFallbackEditor(): void {
+        const items: FallbackChainItem[] = recordsOf(this.modelData.fallback).map((row, idx) => ({
+            id: textOf(row.key) || textOf(row.model) || `fb-${idx}`,
+            label: textOf(row.label) || textOf(row.model) || textOf(row.key),
+            model: textOf(row.model),
+            baseUrl: textOf(row.base_url),
+            provider: textOf(row.provider) || "custom",
+            keyEnv: textOf(row.key_env),
+        }));
+        this.updateFallbackEditor(items);
+    }
+
+    private updateFallbackEditor(items: FallbackChainItem[]): void {
+        const candidates: FallbackCandidateOption[] = recordsOf(this.modelData.candidates).map((row, idx) => {
+            const id = textOf(row.key) || textOf(row.model) || `cand-${idx}`;
+            const model = textOf(row.model);
+            const baseUrl = textOf(row.base_url);
+            const inChain = items.some((item) => item.id === id || (item.model === model && item.baseUrl === baseUrl));
+            return {
+                id,
+                label: textOf(row.label) || model || id,
+                model,
+                baseUrl,
+                provider: textOf(row.provider) || "custom",
+                keyEnv: textOf(row.key_env),
+                inChain,
+            };
+        });
+        const fallbackEditor: FallbackEditorState = {
+            items,
+            candidates,
+            hint: _t("qing|fallback_list_hint"),
+            labels: {
+                chainTitle: _t("qing|text_f40bbf98"),
+                candidatesTitle: _t("qing|fallback_pick_candidates"),
+                emptyChain: _t("qing|fallback_empty_chain"),
+                moveUp: _t("qing|text_f853a70b"),
+                moveDown: _t("qing|text_e75e8b4e"),
+                remove: _t("qing|text_2f9daa82"),
+            },
+        };
+        this.dirty = true;
+        this.snapshot.merge({
+            editing: true,
+            fields: [],
+            rows: [],
+            fallbackEditor,
+            error: "",
+            notice: "",
+            result: "",
+            rawResult: undefined,
+        });
+    }
 
     public confirm = (accepted: boolean): void => {
         const pending = this.pending;
@@ -399,7 +502,7 @@ export class QingCollectionViewModel
         if (this.isDisposed) return;
         const generation = ++this.generation;
         const { resource, persona } = this.props;
-        this.snapshot.merge({ loading: true, error: "" });
+        this.snapshot.merge({ loading: true, error: "", fallbackEditor: undefined });
         try {
             if (resource === "routine") {
                 const [jobResponse, historyResponse] = await Promise.allSettled([
@@ -775,27 +878,13 @@ export class QingCollectionViewModel
     private async saveModel(): Promise<void> {
         const { persona } = this.props;
         if (this.operation === "fallback") {
-            const pool = [...recordsOf(this.modelData.candidates), ...recordsOf(this.modelData.fallback)];
-            const keys = this.values.chain
-                .split("\n")
-                .map((key) => key.trim())
-                .filter(Boolean);
-            const chain = keys.map((key) => {
-                const matches = pool.filter((candidate) => candidate.key === key || candidate.model === key);
-                const item = matches.find((candidate) => candidate.key === key) ?? matches[0];
-                if (
-                    !matches.some((candidate) => candidate.key === key) &&
-                    new Set(matches.map((candidate) => textOf(candidate.base_url))).size > 1
-                )
-                    throw new Error(_t("qing|text_0527f84f", { v0: key }));
-                if (!item) throw new Error(_t("qing|text_8226c173", { v0: key }));
-                return {
-                    provider: textOf(item.provider) || "custom",
-                    model: textOf(item.model),
-                    base_url: textOf(item.base_url),
-                    key_env: textOf(item.key_env),
-                };
-            });
+            const items = this.snapshot.current.fallbackEditor?.items ?? [];
+            const chain = items.map((item) => ({
+                provider: item.provider || "custom",
+                model: item.model,
+                base_url: item.baseUrl,
+                key_env: item.keyEnv,
+            }));
             await hub.saveFallback(persona, chain);
         } else {
             if (!this.values.model.trim()) throw new Error(_t("qing|text_28d51247"));

@@ -184,16 +184,19 @@ describe("Qing page workflows", () => {
         expect(await screen.findByText("生成的简报")).toBeVisible();
     });
 
-    it("loads one memory bundle and saves only the chosen persona", async () => {
+    it("loads one memory bundle as cards and saves when editing raw content", async () => {
         vi.mocked(hub.memoryBundle).mockResolvedValue({
             memory: { memory: { content: "旧记忆" }, profile: { content: "画像" } },
             skills: [],
             entries: [],
         });
         render(<MemoryPage initialPersona="default" />);
+        await screen.findAllByText("旧记忆");
+        expect(screen.queryByRole("textbox", { name: "编辑内容" })).not.toBeInTheDocument();
+        expect(hub.memory).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "编辑" }));
         const editor = await screen.findByRole("textbox", { name: "编辑内容" });
         expect(editor).toHaveValue("旧记忆");
-        expect(hub.memory).not.toHaveBeenCalled();
         fireEvent.change(editor, { target: { value: "新记忆" } });
         fireEvent.click(screen.getByRole("button", { name: "保存记忆" }));
         await waitFor(() => expect(hub.saveMemory).toHaveBeenCalledWith("default", "memory", "新记忆"));
@@ -203,7 +206,7 @@ describe("Qing page workflows", () => {
         vi.mocked(hub.memoryBundle).mockRejectedValue(new HubError("missing", 404));
         vi.mocked(hub.memory).mockResolvedValue({ memory: { content: "兼容记忆" } });
         render(<MemoryPage />);
-        expect(await screen.findByRole("textbox", { name: "编辑内容" })).toHaveValue("兼容记忆");
+        await screen.findAllByText("兼容记忆");
         expect(hub.skills).toHaveBeenCalledWith("default");
     });
 
@@ -213,10 +216,11 @@ describe("Qing page workflows", () => {
             .mockResolvedValueOnce({ memory: { memory: { content: "其他记忆" } }, skills: [], entries: [] });
         vi.mocked(hub.saveMemory).mockRejectedValue(new Error("无写入权限"));
         render(<MemoryPage />);
-        expect(await screen.findByRole("textbox", { name: "编辑内容" })).toHaveValue("办公记忆");
+        await screen.findAllByText("办公记忆");
         fireEvent.change(screen.getByRole("combobox"), { target: { value: "other" } });
-        await waitFor(() => expect(screen.getByRole("textbox", { name: "编辑内容" })).toHaveValue("其他记忆"));
+        await screen.findAllByText("其他记忆");
         expect(hub.memoryBundle).toHaveBeenLastCalledWith("other");
+        fireEvent.click(screen.getByRole("button", { name: "编辑" }));
         fireEvent.click(screen.getByRole("button", { name: "保存记忆" }));
         await screen.findByText(/无写入权限/);
         expect(hub.saveMemory).toHaveBeenCalledWith("other", "memory", "其他记忆");
@@ -234,6 +238,31 @@ describe("Qing page workflows", () => {
         render(<ModelPage />);
         fireEvent.click(await screen.findByRole("button", { name: "新增候选" }));
         expect(screen.getByRole("button", { name: "加入候选池" })).toBeVisible();
+    });
+
+    it("edits fallback chain via list selection and reordering without a textarea", async () => {
+        vi.mocked(hub.agentBundle).mockResolvedValue({
+            model: { key: "primary", label: "Primary", model: "m0", base_url: "https://a.test/v1" },
+            candidates: [
+                { key: "c1", label: "Cand 1", model: "m1", base_url: "https://1.test/v1", key_env: "K1" },
+                { key: "c2", label: "Cand 2", model: "m2", base_url: "https://2.test/v1", key_env: "K2" },
+            ],
+            fallback: [{ key: "c2", label: "Cand 2", model: "m2", base_url: "https://2.test/v1", key_env: "K2" }],
+        });
+        render(<ModelPage />);
+        fireEvent.click(await screen.findByRole("button", { name: "编辑备用链" }));
+        const checkboxes = screen.getAllByRole("checkbox");
+        expect(checkboxes).toHaveLength(2);
+        fireEvent.click(checkboxes[0]);
+        const upButtons = screen.getAllByRole("button", { name: "上移" });
+        fireEvent.click(upButtons[1]);
+        fireEvent.click(screen.getByRole("button", { name: "保存" }));
+        await waitFor(() =>
+            expect(hub.saveFallback).toHaveBeenCalledWith("default", [
+                { provider: "custom", model: "m1", base_url: "https://1.test/v1", key_env: "K1" },
+                { provider: "custom", model: "m2", base_url: "https://2.test/v1", key_env: "K2" },
+            ]),
+        );
     });
 
     it("switches usage ranges and waits for the selected range to finish", async () => {
@@ -439,8 +468,7 @@ describe("Qing page workflows", () => {
         });
         vi.mocked(hub.skillContent).mockResolvedValue({ content: "旧技能" });
         render(<MemoryPage />);
-        await screen.findByRole("textbox", { name: "编辑内容" });
-        fireEvent.click(screen.getByRole("button", { name: "技能" }));
+        fireEvent.click(await screen.findByRole("button", { name: "技能" }));
         fireEvent.click(await screen.findByText("日报", { exact: true }));
         const editor = await screen.findByRole("textbox", { name: "编辑内容" });
         fireEvent.change(editor, { target: { value: "新技能" } });

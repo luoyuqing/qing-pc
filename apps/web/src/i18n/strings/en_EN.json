@@ -2296,7 +2296,11 @@
         "vault_files": "%(v0)s/%(v1)s files",
         "vault_index_ok": "Index healthy",
         "vault_index_warn": "Index warning",
-        "vault_pending": "%(v0)s pending"
+        "vault_pending": "%(v0)s pending",
+        "fallback_list_hint": "Select from candidates and adjust order; models fall back in this order when primary is unavailable.",
+        "fallback_pick_candidates": "Select from candidate models",
+        "fallback_empty_chain": "No fallback chain configured",
+        "device_revoke_confirm": "Revoke access token for device \"%(v0)s\"? It will no longer be able to connect."
     },
     "quick_settings": {
         "all_settings": "All settings",
