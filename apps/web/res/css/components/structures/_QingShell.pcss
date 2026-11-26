@@ -1,0 +1,83 @@
+/*
+Copyright 2026 Qing PC contributors
+
+SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial
+Please see LICENSE in the repository root for full details.
+*/
+
+body {
+    --qing-accent: #6a5ae0;
+    --qing-accent-soft: rgb(106, 90, 224, 0.12);
+}
+body.cpd-theme-dark,
+body.cpd-theme-dark-hc {
+    --qing-accent: #8f80ff;
+    --qing-accent-soft: rgb(143, 128, 255, 0.18);
+}
+/* Keep the chat mounted without letting its resize handles cover business pages. */
+body.qing-business-open .mx_QingShell_elementContent {
+    visibility: hidden;
+}
+body.qing-hide-space .mx_SpacePanel {
+    display: none !important;
+}
+.mx_QingShell_panel {
+    min-width: 0;
+    overflow: hidden;
+    container-type: inline-size;
+    font: var(--cpd-font-body-md-regular);
+    & button,
+    & input,
+    & select,
+    & textarea {
+        font-family: inherit;
+    }
+    & button:focus-visible,
+    & input:focus-visible,
+    & select:focus-visible,
+    & textarea:focus-visible,
+    & [role="button"]:focus-visible {
+        outline: 2px solid var(--cpd-color-border-focused) !important;
+        outline-offset: 2px;
+    }
+    & pre,
+    & img,
+    & table {
+        max-width: 100%;
+    }
+}
+.mx_QingShell_rail button:focus-visible {
+    outline: 2px solid var(--cpd-color-border-focused);
+    outline-offset: 2px;
+}
+.mx_QingShell_header {
+    flex-wrap: wrap;
+    & h1 {
+        margin: 0;
+        overflow-wrap: anywhere;
+    }
+}
+.mx_QingShell_headerActions {
+    flex-wrap: wrap;
+}
+.mx_QingShell_scroll {
+    scrollbar-gutter: stable;
+    overflow-wrap: anywhere;
+    & > .mx_QingShell_content {
+        width: 100%;
+        max-width: 1152px;
+        margin-inline: auto;
+    }
+}
+
+@container (width < 600px) {
+    .mx_QingShell_header {
+        padding: 16px 12px 12px !important;
+    }
+    .mx_QingShell_scroll {
+        padding-inline: 12px !important;
+    }
+    .mx_QingShell_headerActions {
+        width: 100%;
+    }
+}

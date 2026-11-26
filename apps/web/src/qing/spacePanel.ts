@@ -1,8 +1,15 @@
 /*
+Copyright 2026 Qing PC contributors
+
+SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial
+Please see LICENSE in the repository root for full details.
+*/
+
+/*
 Qing PC · 空间栏显隐
 
-默认收起 Element 的空间栏，让 Qing 的六项导航成为唯一的一级导航。
-用户若在多空间之间切换，可在 设置 → 界面 里把它打开。
+默认收起 Element 的空间栏，让 Qing 的五项导航成为唯一的一级导航。
+用户若在多空间之间切换，可在 设置 里把它打开。
 状态存 localStorage，改完立即生效（只切 body class，无需重启）。
 */
 

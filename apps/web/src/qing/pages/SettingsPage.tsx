@@ -1,4 +1,11 @@
 /*
+Copyright 2026 Qing PC contributors
+
+SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial
+Please see LICENSE in the repository root for full details.
+*/
+
+/*
 Qing PC · 设置
 
 菜单顺序与结构严格对齐手机端 settings_view.dart：
@@ -15,12 +22,16 @@ Qing PC · 设置
 19 退出登录
 */
 
+import { _t } from "../../languageHandler";
 import React, { useState } from "react";
-import { MatrixClientPeg } from "../../MatrixClientPeg";
+import { isSpacePanelVisible, setSpacePanelVisible } from "../spacePanel";
+import { UserTab } from "../../components/views/dialogs/UserTab";
+import { QingPanel } from "../QingPanel";
 import dis from "../../dispatcher/dispatcher";
 import { Action } from "../../dispatcher/actions";
 import { DEFAULT_BASE_URL, hub, loadConfig, saveConfig } from "../hub";
-import { Button, Card, PageHeader, Scroll } from "../ui";
+import { friendlyError } from "../status";
+import { Button, PageHeader, Scroll } from "../ui";
 import { palette } from "../theme";
 import { ListPage } from "./ListPage";
 import { ModelPage } from "./ModelPage";
@@ -44,7 +55,9 @@ type Route =
     | "usage"
     | "mcp"
     | "privacy"
-    | "devices";
+    | "devices"
+    | "audit"
+    | "diagnose";
 
 type MenuAction = "element" | "tab" | "logout" | "route";
 
@@ -54,37 +67,95 @@ interface MenuItem {
     action: MenuAction;
     route?: Route;
     danger?: boolean;
+    elementTab?: UserTab;
 }
 
-const MENU: (MenuItem | "divider" | string)[] = [
-    // ---- Qing 管理（本机 / X2 上的真实功能）----
-    "group:清助理",
-    { label: "服务器状态", desc: "CPU、内存、磁盘、服务与容器的实时占用", action: "route", route: "server" },
-    { label: "记忆", desc: "记忆 · 画像 · 技能 · 人设", action: "route", route: "memory" },
-    { label: "模型与推理", desc: "端点 · 模型 · 候选池 · 备用链（按人设独立）", action: "route", route: "model" },
-    { label: "凭据", desc: "模型端点的 API Key 增删改", action: "route", route: "credentials" },
-    { label: "插件与能力", desc: "X2 上已安装 / 内置的插件", action: "route", route: "plugins" },
-    { label: "用量", desc: "请求数 · Tokens · 预估花费（按模型/人设）", action: "route", route: "usage" },
-    { label: "设备数据", desc: "通知 · 日历 · 通讯录 · 应用时长", action: "route", route: "device-data" },
-    { label: "连接应用", desc: "MCP 服务（由 X2 代理）", action: "route", route: "mcp" },
-    { label: "数据与隐私", desc: "数据保留策略 · 存储位置", action: "route", route: "privacy" },
+function getMENU(): (MenuItem | "divider" | string)[] {
+    return [
+        // ---- Qing 管理（本机 / X2 上的真实功能）----
+        _t("qing|text_3639c03f"),
+        { label: _t("qing|text_2e412e23"), desc: _t("qing|text_ef51c8c2"), action: "route", route: "server" },
+        { label: _t("qing|text_7a6335b3"), desc: _t("qing|text_65aa356d"), action: "route", route: "memory" },
+        { label: _t("qing|text_f8db5bcd"), desc: _t("qing|text_b8336954"), action: "route", route: "model" },
+        { label: _t("qing|text_2dfe17d7"), desc: _t("qing|text_5511157b"), action: "route", route: "credentials" },
+        { label: _t("qing|text_a1226a32"), desc: _t("qing|text_f2e4ea11"), action: "route", route: "plugins" },
+        { label: _t("qing|text_42723e8b"), desc: _t("qing|text_396f6bab"), action: "route", route: "usage" },
+        { label: _t("qing|text_61766385"), desc: _t("qing|text_acf5b92b"), action: "route", route: "device-data" },
+        { label: _t("qing|text_b1bea287"), desc: _t("qing|text_46107fe2"), action: "route", route: "mcp" },
+        { label: _t("qing|text_ebdc835e"), desc: _t("qing|text_8307a884"), action: "route", route: "privacy" },
 
-    // ---- Element 自带设置（放最后）----
-    "group:Element 设置",
-    { label: "聊天备份", desc: "端到端加密密钥备份", action: "element" },
-    { label: "账号管理", desc: "头像、昵称、密码", action: "element" },
-    { label: "修改主题", desc: "深色/浅色、字号、布局", action: "element" },
-    { label: "通知", desc: "系统通知、提示音、免打扰", action: "element" },
-    { label: "聊天", desc: "消息显示、媒体、链接预览", action: "element" },
-    { label: "安全", desc: "加密、会话验证、密钥备份", action: "element" },
-    { label: "隐私", desc: "已读回执、输入状态、分析", action: "element" },
+        { label: _t("qing|text_1df28f61"), desc: _t("qing|text_4860c010"), action: "route", route: "devices" },
+        { label: _t("qing|text_b119a5b0"), desc: _t("qing|text_37deeea2"), action: "route", route: "audit" },
+        { label: _t("qing|text_de94f8b3"), desc: _t("qing|text_cd743d68"), action: "route", route: "diagnose" },
 
-    "divider",
-    { label: "退出登录", action: "logout", danger: true },
-];
+        // ---- Element 自带设置（放最后）----
+        _t("qing|text_9dc52899"),
+        {
+            label: _t("qing|text_ec008db5"),
+            elementTab: UserTab.Encryption,
+            desc: _t("qing|text_4149ecb2"),
+            action: "element",
+        },
+        {
+            label: _t("qing|text_eba54690"),
+            elementTab: UserTab.Account,
+            desc: _t("qing|text_fb7c3438"),
+            action: "element",
+        },
+        {
+            label: _t("qing|text_bbdf68b6"),
+            elementTab: UserTab.Appearance,
+            desc: _t("qing|text_f61d2446"),
+            action: "element",
+        },
+        {
+            label: _t("qing|text_4b6ded8a"),
+            elementTab: UserTab.Notifications,
+            desc: _t("qing|text_5ae17875"),
+            action: "element",
+        },
+        {
+            label: _t("qing|text_4b3510b8"),
+            elementTab: UserTab.Preferences,
+            desc: _t("qing|text_9d968683"),
+            action: "element",
+        },
+        {
+            label: _t("qing|text_afb63a62"),
+            elementTab: UserTab.Security,
+            desc: _t("qing|text_3a6f1df1"),
+            action: "element",
+        },
+        {
+            label: _t("qing|text_86651d17"),
+            elementTab: UserTab.Preferences,
+            desc: _t("qing|text_1dc27134"),
+            action: "element",
+        },
+
+        "divider",
+        { label: _t("qing|text_3ab8cc15"), action: "logout", danger: true },
+    ];
+}
+
+const CopyButton: React.FC<{ value: string }> = ({ value }): React.ReactNode => {
+    const [copied, setCopied] = useState(false);
+    const copy = (): void => {
+        if (!value || !navigator.clipboard?.writeText) return;
+        void navigator.clipboard.writeText(value).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1800);
+        });
+    };
+    return (
+        <Button disabled={!value} onClick={copy}>
+            {copied ? _t("qing|copied") : _t("qing|copy")}
+        </Button>
+    );
+};
 
 /** device-hub 连接：地址 + 配对码（与手机端一致，不要求手抄 48 位令牌） */
-const HubForm: React.FC<{ onBack: () => void; onPaired: () => void }> = ({ onBack, onPaired }) => {
+const HubForm: React.FC<{ onBack: () => void; onPaired: () => void }> = ({ onBack, onPaired }): React.ReactNode => {
     const initial = loadConfig();
     const [baseUrl, setBaseUrl] = useState(initial.baseUrl);
     const [code, setCode] = useState("");
@@ -106,40 +177,44 @@ const HubForm: React.FC<{ onBack: () => void; onPaired: () => void }> = ({ onBac
         color: p.text,
     };
 
-    const doPair = async () => {
+    const doPair = async (): Promise<void> => {
         if (!/^\d{6}$/.test(code.trim())) {
-            setStatus({ ok: false, text: "配对码是 6 位数字。" });
+            setStatus({ ok: false, text: _t("qing|text_53daa573") });
             return;
         }
         setBusy(true);
         setStatus(null);
         try {
-            const r = await hub.pair(code.trim(), "Qing PC");
-            if (!r?.token) throw new Error("服务端没有返回令牌");
+            const r = await hub.pair(code.trim(), "Qing PC", baseUrl.trim());
+            if (!r?.token) throw new Error(_t("qing|text_625ba281"));
             saveConfig({ baseUrl, token: r.token, persona: initial.persona });
             setToken(r.token);
-            setStatus({ ok: true, text: `配对成功${r.device_id ? `，设备 ${r.device_id} 已登记` : ""}` });
+            setStatus({
+                ok: true,
+                text: _t("qing|text_db15c3eb", {
+                    v0: r.device_id ? _t("qing|text_3534292b", { v0: r.device_id }) : "",
+                }),
+            });
             setCode("");
             onPaired();
         } catch (e) {
-            setStatus({ ok: false, text: `配对失败：${(e as Error).message}` });
+            setStatus({ ok: false, text: _t("qing|text_990729ee", { v0: friendlyError(e) }) });
         }
         setBusy(false);
     };
 
-    const test = async () => {
+    const test = async (): Promise<void> => {
         setBusy(true);
         setStatus(null);
         saveConfig({ baseUrl, token, persona: initial.persona });
         try {
             const h = await hub.health();
             await hub.personas();
-            setStatus({ ok: true, text: `连接成功（device-hub ${h?.version ?? "ok"}，令牌有效）` });
+            setStatus({ ok: true, text: _t("qing|text_0e58a688", { v0: h?.version ?? "ok" }) });
         } catch (e) {
-            const msg = (e as Error).message;
             setStatus({
                 ok: false,
-                text: /HTTP 401/.test(msg) ? "地址通了，但令牌无效（HTTP 401）。" : `连接失败：${msg}`,
+                text: friendlyError(e),
             });
         }
         setBusy(false);
@@ -147,74 +222,105 @@ const HubForm: React.FC<{ onBack: () => void; onPaired: () => void }> = ({ onBac
 
     return (
         <>
-            <PageHeader title="设备数据" subtitle="连接 X2 上的 device-hub" onBack={onBack} />
+            <PageHeader title={_t("qing|text_61766385")} subtitle={_t("qing|text_6394f154")} onBack={onBack} />
             <Scroll>
                 <div style={{ maxWidth: 560 }}>
                     <div style={{ marginBottom: 16 }}>
-                        <div style={{ fontSize: 12, color: p.textDim, marginBottom: 5 }}>device-hub 地址</div>
-                        <input
-                            value={baseUrl}
-                            onChange={(e) => setBaseUrl(e.target.value)}
-                            placeholder={DEFAULT_BASE_URL}
-                            style={box}
-                        />
+                        <div style={{ fontSize: 12, color: p.textDim, marginBottom: 5 }}>
+                            {_t("qing|text_e0153852")}
+                        </div>
+                        <div style={{ display: "flex", gap: 8 }}>
+                            <input
+                                aria-label={_t("qing|text_e0153852")}
+                                value={baseUrl}
+                                onChange={(e) => setBaseUrl(e.target.value)}
+                                placeholder={DEFAULT_BASE_URL}
+                                style={{ ...box, flex: 1 }}
+                            />
+                            <CopyButton value={baseUrl} />
+                        </div>
                     </div>
 
                     <div style={{ marginBottom: 16 }}>
-                        <div style={{ fontSize: 12, color: p.textDim, marginBottom: 5 }}>配对码</div>
+                        <div style={{ fontSize: 12, color: p.textDim, marginBottom: 5 }}>
+                            {_t("qing|text_5cfc08a6")}
+                        </div>
                         <div style={{ display: "flex", gap: 10 }}>
                             <input
+                                aria-label={_t("qing|text_5cfc08a6")}
                                 value={code}
                                 onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                                placeholder="6 位数字"
+                                placeholder={_t("qing|text_7ce6963f")}
                                 inputMode="numeric"
                                 style={{ ...box, width: 160, letterSpacing: 4, fontSize: 16 }}
                             />
                             <Button variant="primary" disabled={busy} onClick={() => void doPair()}>
-                                {busy ? "处理中…" : "配对"}
+                                {busy ? _t("qing|text_d3d21191") : _t("qing|text_7c5cc4dd")}
                             </Button>
                         </div>
                         <div style={{ fontSize: 11.5, color: p.textDim, marginTop: 6, lineHeight: 1.6 }}>
-                            配对码在 X2 上生成（`POST /admin/pair-code`）。配对成功后令牌自动写入，不用手抄。
+                            {_t("qing|text_f47e1375")}
                         </div>
                     </div>
 
                     <div style={{ marginBottom: 6 }}>
-                        <span
+                        <button
+                            type="button"
                             onClick={() => setAdvanced((v) => !v)}
                             style={{ fontSize: 12, color: p.accent, cursor: "pointer" }}
                         >
-                            {advanced ? "收起手动令牌" : "已有令牌？手动填"}
-                        </span>
+                            {advanced ? _t("qing|text_07e5d282") : _t("qing|text_752778e5")}
+                        </button>
                     </div>
                     {advanced && (
                         <div style={{ marginBottom: 16 }}>
-                            <div style={{ fontSize: 12, color: p.textDim, marginBottom: 5 }}>访问令牌（48 位）</div>
-                            <input
-                                type="password"
-                                value={token}
-                                onChange={(e) => setToken(e.target.value)}
-                                style={box}
-                            />
+                            <div style={{ fontSize: 12, color: p.textDim, marginBottom: 5 }}>
+                                {_t("qing|text_c4e928b0")}
+                            </div>
+                            <div style={{ display: "flex", gap: 8 }}>
+                                <input
+                                    type="password"
+                                    aria-label={_t("qing|text_70133285")}
+                                    value={token}
+                                    onChange={(e) => setToken(e.target.value)}
+                                    style={{ ...box, flex: 1 }}
+                                />
+                                <CopyButton value={token} />
+                            </div>
                         </div>
                     )}
 
                     <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
                         <Button disabled={busy} onClick={() => void test()}>
-                            测试连接
+                            {_t("qing|text_0a98a48e")}
                         </Button>
                         <Button
+                            disabled={busy}
                             onClick={() => {
                                 saveConfig({ baseUrl, token, persona: initial.persona });
-                                setStatus({ ok: true, text: "已保存" });
+                                setStatus({ ok: true, text: _t("qing|text_1bd91a7d") });
                             }}
                         >
-                            仅保存
+                            {_t("qing|text_0adada7d")}
                         </Button>
                     </div>
 
+                    {token && (
+                        <Button
+                            disabled={busy}
+                            onClick={() => {
+                                saveConfig({ baseUrl, token: "", persona: initial.persona });
+                                setToken("");
+                                setStatus({ ok: true, text: _t("qing|text_b04db03c") });
+                            }}
+                        >
+                            {_t("qing|text_0c02ceca")}
+                        </Button>
+                    )}
+
                     {status && (
                         <div
+                            role={status.ok ? "status" : "alert"}
                             style={{
                                 marginTop: 14,
                                 fontSize: 12.5,
@@ -227,8 +333,7 @@ const HubForm: React.FC<{ onBack: () => void; onPaired: () => void }> = ({ onBac
                     )}
 
                     <div style={{ marginTop: 24, fontSize: 11.5, color: p.textDim, lineHeight: 1.7 }}>
-                        通知、短信、通讯录、日历、定位与 App 使用时长由 Android 端采集上报，
-                        PC 通过 device-hub 读取同一份数据。聊天沿用 Element 的 Matrix 会话。
+                        {_t("qing|text_2438ea54")}
                     </div>
                 </div>
             </Scroll>
@@ -236,7 +341,7 @@ const HubForm: React.FC<{ onBack: () => void; onPaired: () => void }> = ({ onBac
     );
 };
 
-const Divider: React.FC = () => {
+const Divider: React.FC = (): React.ReactNode => {
     const p = palette();
     return <div style={{ height: 1, background: p.border, margin: "10px 0" }} />;
 };
@@ -244,11 +349,12 @@ const Divider: React.FC = () => {
 export const SettingsPage: React.FC<{
     onNavigateElement: () => void;
     onNavigateTab?: (tab: "services") => void;
-    onLogout?: () => void;
-}> = ({ onNavigateElement, onNavigateTab, onLogout }) => {
+    onOpenRoom?: (roomId: string) => void;
+}> = ({ onNavigateElement, onNavigateTab, onOpenRoom }): React.ReactNode => {
+    const [spacePanel, setSpacePanel] = useState(isSpacePanelVisible);
     const [route, setRoute] = useState<Route>("root");
     const p = palette();
-    const back = () => setRoute("root");
+    const back = (): void => setRoute("root");
 
     if (route === "hub") return <HubForm onBack={back} onPaired={back} />;
     if (route === "memory") return <MemoryPage onBack={back} initialPersona={loadConfig().persona} />;
@@ -263,102 +369,102 @@ export const SettingsPage: React.FC<{
     if (route === "plugins")
         return (
             <ListPage
-                title="插件与能力"
-                subtitle="X2 上已安装与内置的插件"
+                title={_t("qing|text_a1226a32")}
+                subtitle={_t("qing|text_d5b15ee4")}
                 onBack={back}
                 loader={() => hub.agentPlugins()}
                 columns={[
                     { key: "name", title: true },
-                    { key: "version", label: "版本" },
-                    { key: "kind", label: "类型" },
-                    { key: "description", label: "说明" },
+                    { key: "version", label: _t("qing|text_5f76b2bf") },
+                    { key: "kind", label: _t("qing|text_ba40014f") },
+                    { key: "description", label: _t("qing|text_4262c45d") },
                 ]}
             />
         );
 
-    if (route === "devices")
-        return (
-            <ListPage
-                title="设备"
-                subtitle="曾经连过 X2 的设备与令牌"
-                onBack={back}
-                hint="服务端暂未提供吊销接口，需要吊销请到 X2 上处理。"
-                loader={() => hub.devices()}
-                columns={[
-                    { key: "name", title: true },
-                    { key: "id", label: "设备 ID" },
-                    { key: "scopes", label: "权限" },
-                    { key: "revoked", label: "状态", render: (x) => (x.revoked ? "已吊销" : "有效") },
-                    {
-                        key: "last_seen",
-                        label: "最近活跃",
-                        render: (x) => `${x.last_seen ?? "—"}`.replace("T", " ").slice(0, 16),
-                    },
-                ]}
-            />
-        );
+    if (route === "devices" || route === "audit" || route === "diagnose")
+        return <QingPanel key={route} resource={route} persona={loadConfig().persona} onBack={back} />;
 
     /**
      * Element 自带设置是 Modal（UserSettingsDialog），只能通过 dispatcher 触发。
      * 同步 fire，不延迟——延迟会让组件先卸载，实测时机不可靠。
      * 优先用 Element 注册在 window 上的单例，其次退回 import 的实例。
      */
-    const openElementSettings = () => {
-        const bridge = (window as unknown as { mxDispatcher?: { fire: (a: string) => void } }).mxDispatcher;
-        console.log("[qing] openElementSettings", typeof bridge?.fire);
-        try {
-            if (bridge?.fire) bridge.fire("view_user_settings");
-            else dis.fire(Action.ViewUserSettings);
-        } catch (e) {
-            console.error("[qing] fire failed", e);
-        }
+    const openElementSettings = (initialTabId = UserTab.Account): void => {
+        dis.dispatch({ action: Action.ViewUserSettings, initialTabId });
         onNavigateElement();
     };
-
-    const logout = async () => {
-        if (!window.confirm("退出登录？本机缓存的消息会保留，重新登录即可恢复。")) return;
-        try {
-            await MatrixClientPeg.safeGet().logout(true);
-        } catch {
-            /* 网络失败也强制回登录页 */
-        }
-        onLogout?.();
+    const logout = (): void => {
+        dis.dispatch({ action: "logout" });
+        onNavigateElement();
     };
 
     return (
         <>
-            <PageHeader title="设置" />
+            <PageHeader title={_t("qing|text_df3d58c7")} />
             <Scroll>
-                {MENU.map((item, i) => {
-                    if (item === "divider") return <Divider key={`d${i}`} />;
-                    if (typeof item === "string" && item.startsWith("group:")) {
-                        const title = item.slice(6);
+                <label style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 0" }}>
+                    <input
+                        type="checkbox"
+                        checked={spacePanel}
+                        onChange={(event) => {
+                            setSpacePanel(event.target.checked);
+                            setSpacePanelVisible(event.target.checked);
+                        }}
+                    />
+                    {_t("qing|space_panel")}
+                </label>
+                <div
+                    style={{
+                        borderRadius: 12,
+                        background: p.bgAlt,
+                        border: `1px solid ${p.divider}`,
+                        overflow: "hidden",
+                    }}
+                >
+                    {getMENU().map((item, i) => {
+                        if (item === "divider") return <Divider key="divider" />;
+                        if (typeof item === "string") {
+                            const title = item.slice(6);
+                            return (
+                                <div
+                                    key={item}
+                                    style={{
+                                        fontSize: 11.5,
+                                        fontWeight: 600,
+                                        color: p.textDim,
+                                        padding: i === 0 ? "12px 14px 6px" : "16px 14px 6px",
+                                        borderTop: i === 0 ? "none" : `1px solid ${p.divider}`,
+                                        letterSpacing: 0.3,
+                                    }}
+                                >
+                                    {title}
+                                </div>
+                            );
+                        }
                         return (
-                            <div
-                                key={`g${i}`}
+                            <button
+                                key={item.label}
+                                type="button"
+                                onClick={() => {
+                                    if (item.action === "route" && item.route) setRoute(item.route);
+                                    else if (item.action === "element") openElementSettings(item.elementTab);
+                                    else if (item.action === "tab") onNavigateTab?.("services");
+                                    else if (item.action === "logout") logout();
+                                }}
                                 style={{
-                                    fontSize: 11.5,
-                                    color: p.textDim,
-                                    margin: i === 0 ? "2px 0 8px" : "18px 0 8px",
-                                    letterSpacing: 0.3,
+                                    width: "100%",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 10,
+                                    padding: "11px 14px",
+                                    border: "none",
+                                    borderTop: `1px solid ${p.divider}`,
+                                    background: "transparent",
+                                    cursor: "pointer",
+                                    textAlign: "left",
                                 }}
                             >
-                                {title}
-                            </div>
-                        );
-                    }
-                    return (
-                        <Card
-                            key={item.label}
-                            onClick={() => {
-                                if (item.action === "route" && item.route) setRoute(item.route);
-                                else if (item.action === "element") openElementSettings();
-                                else if (item.action === "tab") onNavigateTab?.("services");
-                                else if (item.action === "logout") void logout();
-                            }}
-                            style={{ marginBottom: 6, padding: "11px 14px" }}
-                        >
-                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                     <div
                                         style={{
@@ -376,10 +482,10 @@ export const SettingsPage: React.FC<{
                                     )}
                                 </div>
                                 {!item.danger && <span style={{ color: p.textDim, fontSize: 14 }}>›</span>}
-                            </div>
-                        </Card>
-                    );
-                })}
+                            </button>
+                        );
+                    })}
+                </div>
                 <div style={{ height: 20 }} />
             </Scroll>
         </>

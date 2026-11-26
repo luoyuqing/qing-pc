@@ -1,4 +1,11 @@
 /*
+Copyright 2026 Qing PC contributors
+
+SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial
+Please see LICENSE in the repository root for full details.
+*/
+
+/*
 Qing PC · 服务
 对齐手机端 services_page.dart 的两段式布局：
 - 本机服务（group=local）：卡片网格，点开先换 60 秒一次性票据，再在**内置窗口**打开
@@ -7,8 +14,10 @@ Qing PC · 服务
 打开本机服务时显示等待遮罩（主进程会在页面加载完成后才返回）。
 */
 
+import { _t } from "../../languageHandler";
 import React, { useCallback, useEffect, useState } from "react";
-import { hub, itemsOf } from "../hub";
+import { QingPanel } from "../QingPanel";
+import { hub, itemsOf, loadConfig } from "../hub";
 import { Button, Card, Empty, ErrorBox, PageHeader, Scroll } from "../ui";
 import { palette } from "../theme";
 
@@ -44,7 +53,7 @@ const ICONS: Record<string, string> = {
     image: "🖼️",
 };
 
-const Spinner: React.FC<{ color: string }> = ({ color }) => (
+const Spinner: React.FC<{ color: string }> = ({ color }): React.ReactNode => (
     <>
         <style>{`@keyframes qing-spin { to { transform: rotate(360deg); } }`}</style>
         <div
@@ -52,7 +61,7 @@ const Spinner: React.FC<{ color: string }> = ({ color }) => (
                 width: 22,
                 height: 22,
                 borderRadius: "50%",
-                border: `2.5px solid ${color}33`,
+                border: "2.5px solid var(--qing-accent-soft)",
                 borderTopColor: color,
                 animation: "qing-spin 0.8s linear infinite",
             }}
@@ -60,7 +69,8 @@ const Spinner: React.FC<{ color: string }> = ({ color }) => (
     </>
 );
 
-export const ServicesPage: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
+export const ServicesPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.ReactNode => {
+    const [manage, setManage] = useState(false);
     const [services, setServices] = useState<any[]>([]);
     const [favs, setFavs] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -92,16 +102,16 @@ export const ServicesPage: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
         void load();
     }, [load, tick]);
 
-    const openService = async (service: any) => {
+    const openService = async (service: any): Promise<void> => {
         setOpening(service.id);
         setError(null);
         try {
             const data = await hub.serviceTicket(`${service.id}`);
             const url = `${data?.url || ""}`;
-            if (!url) throw new Error("服务端未返回入口地址");
+            if (!url) throw new Error(_t("qing|text_3044e48b"));
             const parsed = new URL(url);
             if (parsed.protocol !== "https:" || !isAllowedHost(parsed.hostname)) {
-                throw new Error("服务端返回的入口地址不在白名单内");
+                throw new Error(_t("qing|text_2c82abf6"));
             }
             await openServiceWindow(url);
         } catch (e) {
@@ -110,16 +120,46 @@ export const ServicesPage: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
         setOpening(null);
     };
 
+    if (manage)
+        return (
+            <QingPanel
+                resource="favorites"
+                persona={loadConfig().persona}
+                onBack={() => {
+                    setManage(false);
+                    void load();
+                }}
+            />
+        );
+
+    const moveService = async (id: string, direction: number): Promise<void> => {
+        const order = services.filter((item) => `${item.group || "local"}` === "local");
+        const index = order.findIndex((item) => String(item.id) === id);
+        const next = index + direction;
+        if (next < 0 || next >= order.length) return;
+        [order[index], order[next]] = [order[next], order[index]];
+        try {
+            await hub.serviceOrder(order.map((item) => String(item.id)));
+            await load();
+        } catch (error) {
+            setError((error as Error).message);
+        }
+    };
     const local = services.filter((s) => `${s.group || "local"}` === "local");
     const webCards = services.filter((s) => `${s.group || "local"}` !== "local" && s.type !== "bookmarks");
 
     return (
         <>
             <PageHeader
-                title="服务"
-                subtitle="本机管理页面与外网收藏"
+                title={_t("qing|text_ec309ab2")}
+                subtitle={_t("qing|text_1a4c7b1a")}
                 onBack={onBack}
-                right={<Button onClick={() => setTick((t) => t + 1)}>刷新</Button>}
+                right={
+                    <>
+                        <Button onClick={() => setManage(true)}>{_t("qing|text_3c7c1e16")}</Button>
+                        <Button onClick={() => setTick((t) => t + 1)}>{_t("qing|text_aee88743")}</Button>
+                    </>
+                }
             />
 
             {loading ? (
@@ -139,14 +179,16 @@ export const ServicesPage: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                     )}
 
                     <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
-                        <span style={{ fontSize: 12, color: p.textDim }}>本机服务</span>
+                        <span style={{ fontSize: 12, color: p.textDim }}>{_t("qing|text_e3cc3d39")}</span>
                         <span style={{ fontSize: 11, color: p.textDim, marginLeft: 8 }}>
-                            一次性票据 · 内置窗口打开
+                            {_t("qing|text_158525e6")}
                         </span>
-                        <span style={{ fontSize: 11, color: p.textDim, marginLeft: "auto" }}>{local.length} 个</span>
+                        <span style={{ fontSize: 11, color: p.textDim, marginLeft: "auto" }}>
+                            {local.length} {_t("qing|text_3a116815")}
+                        </span>
                     </div>
                     {local.length === 0 ? (
-                        <Empty text="没有本机服务。" />
+                        <Empty text={_t("qing|text_0efa7a87")} />
                     ) : (
                         <div
                             style={{
@@ -156,7 +198,7 @@ export const ServicesPage: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                                 marginBottom: 24,
                             }}
                         >
-                            {local.map((item) => (
+                            {local.map((item, index) => (
                                 <Card
                                     key={item.id}
                                     onClick={() => (opening ? undefined : void openService(item))}
@@ -196,6 +238,14 @@ export const ServicesPage: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                                         >
                                             {item.name || item.id}
                                         </div>
+                                        <Button
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                void moveService(String(item.id), -1);
+                                            }}
+                                        >
+                                            {_t("qing|text_f853a70b")}
+                                        </Button>
                                         {item.desc && (
                                             <div
                                                 style={{
@@ -218,7 +268,9 @@ export const ServicesPage: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
 
                     {webCards.length > 0 && (
                         <>
-                            <div style={{ fontSize: 12, color: p.textDim, marginBottom: 10 }}>外网服务</div>
+                            <div style={{ fontSize: 12, color: p.textDim, marginBottom: 10 }}>
+                                {_t("qing|text_80f4bb7b")}
+                            </div>
                             {webCards.map((item) => (
                                 <Card
                                     key={item.id}
@@ -236,7 +288,9 @@ export const ServicesPage: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
 
                     {favs.length > 0 && (
                         <>
-                            <div style={{ fontSize: 12, color: p.textDim, margin: "20px 0 10px" }}>外网收藏</div>
+                            <div style={{ fontSize: 12, color: p.textDim, margin: "20px 0 10px" }}>
+                                {_t("qing|text_8fbdb033")}
+                            </div>
                             {favs.map((fav, i) => (
                                 <Card
                                     key={fav.id ?? i}
@@ -284,9 +338,10 @@ export const ServicesPage: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                 >
                     <Spinner color={p.accent} />
                     <div style={{ fontSize: 13, color: p.text }}>
-                        正在打开 {services.find((s) => s.id === opening)?.name || "服务"}…
+                        {_t("qing|text_48de9f48")}
+                        {services.find((s) => s.id === opening)?.name || _t("qing|text_ec309ab2")}…
                     </div>
-                    <div style={{ fontSize: 11.5, color: p.textDim }}>正在申请一次性票据并加载页面</div>
+                    <div style={{ fontSize: 11.5, color: p.textDim }}>{_t("qing|text_18883353")}</div>
                 </div>
             )}
         </>

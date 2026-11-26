@@ -1,8 +1,17 @@
 /*
+Copyright 2026 Qing PC contributors
+
+SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial
+Please see LICENSE in the repository root for full details.
+*/
+
+/*
 Qing PC · device-hub 客户端
 与手机端 lib/utils/device_hub/* 使用同一套接口与 Bearer 鉴权，
 保证 PC 与手机读写同一份数据。
 */
+
+import { _t } from "../languageHandler";
 
 export interface HubConfig {
     baseUrl: string;
@@ -18,11 +27,16 @@ export function loadConfig(): HubConfig {
     try {
         const raw = window.localStorage.getItem(STORAGE_KEY);
         if (raw) {
-            const parsed = JSON.parse(raw) as Partial<HubConfig>;
+            const parsed: unknown = JSON.parse(raw);
+            if (!parsed || typeof parsed !== "object") throw new Error("Invalid configuration");
+            const values = parsed as Record<string, unknown>;
             return {
-                baseUrl: (parsed.baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, ""),
-                token: parsed.token || "",
-                persona: parsed.persona || "default",
+                baseUrl: (typeof values.baseUrl === "string" && values.baseUrl.trim()
+                    ? values.baseUrl.trim()
+                    : DEFAULT_BASE_URL
+                ).replace(/\/+$/, ""),
+                token: typeof values.token === "string" ? values.token : "",
+                persona: typeof values.persona === "string" && values.persona ? values.persona : "default",
             };
         }
     } catch {
@@ -42,7 +56,15 @@ export function saveConfig(config: HubConfig): void {
     );
 }
 
-export class HubError extends Error {}
+/** An unsuccessful device-hub request, retaining its HTTP status for compatibility fallbacks. */
+export class HubError extends Error {
+    public constructor(
+        message: string,
+        public readonly status = 0,
+    ) {
+        super(message);
+    }
+}
 
 /** 主进程代理接口（preload 暴露）。没有它就只能退回浏览器 fetch。 */
 interface QingHubBridge {
@@ -51,6 +73,7 @@ interface QingHubBridge {
         method?: string;
         headers?: Record<string, string>;
         body?: string;
+        timeoutMs?: number;
     }): Promise<{ ok: boolean; status: number; body: string }>;
 }
 
@@ -58,13 +81,21 @@ function hubBridge(): QingHubBridge | undefined {
     return (window as unknown as { qingHub?: QingHubBridge }).qingHub;
 }
 
-async function request(path: string, init?: RequestInit): Promise<any> {
-    const { baseUrl, token } = loadConfig();
+/** The legacy pages consume open hub response envelopes; new resources decode unknown values at their boundary. */
+async function request<T = unknown>(
+    path: string,
+    init?: RequestInit,
+    config = loadConfig(),
+    timeoutMs = 10000,
+): Promise<T> {
+    const { baseUrl, token } = config;
+    const parsed = new URL(baseUrl);
+    if (!["http:", "https:"].includes(parsed.protocol)) throw new HubError(_t("qing|text_5170ada9"));
     const headers: Record<string, string> = { Accept: "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
     if (init?.body) headers["Content-Type"] = "application/json; charset=utf-8";
 
-    const url = `${baseUrl}${path}`;
+    const url = `${baseUrl.replace(/\/+$/, "")}${path}`;
     let status = 0;
     let text = "";
 
@@ -78,6 +109,7 @@ async function request(path: string, init?: RequestInit): Promise<any> {
                 method: init?.method ?? "GET",
                 headers,
                 body: typeof init?.body === "string" ? init.body : undefined,
+                timeoutMs,
             });
             status = res.status;
             text = res.body;
@@ -86,7 +118,9 @@ async function request(path: string, init?: RequestInit): Promise<any> {
             const response = await fetch(url, {
                 ...init,
                 headers,
-                signal: AbortSignal.timeout(10000),
+                signal: init?.signal
+                    ? AbortSignal.any([init.signal, AbortSignal.timeout(timeoutMs)])
+                    : AbortSignal.timeout(timeoutMs),
             });
             status = response.status;
             text = await response.text();
@@ -95,36 +129,39 @@ async function request(path: string, init?: RequestInit): Promise<any> {
         const err = e as Error;
         const msg = err?.message || String(e);
         if (err.name === "TimeoutError" || err.name === "AbortError" || /timed out|timeout/i.test(msg)) {
-            throw new HubError(`${baseUrl} 响应超时（10 秒），检查地址与网络`);
+            throw new HubError(_t("qing|text_31076387", { v0: baseUrl, v1: Math.round(timeoutMs / 1000) }));
         }
         if (/Failed to fetch|NetworkError|ERR_/i.test(msg)) {
-            throw new HubError(
-                `无法连接 ${baseUrl}：${msg}（若地址可访问，可能是跨域被拦，PC 端应走主进程代理）`,
-            );
+            throw new HubError(_t("qing|text_da0ff888", { v0: baseUrl, v1: msg }));
         }
-        throw new HubError(`请求 ${baseUrl} 失败：${msg}`);
+        throw new HubError(_t("qing|text_4da3d904", { v0: baseUrl, v1: msg }));
     }
 
     if (status < 200 || status >= 300) {
-        throw new HubError(`HTTP ${status} ${text.slice(0, 200)}`.trim());
+        throw new HubError(`HTTP ${status} ${text.slice(0, 200)}`.trim(), status);
     }
-    if (!text) return null;
+    if (!text) return null as T;
     try {
-        return JSON.parse(text);
+        return JSON.parse(text) as T;
     } catch {
-        return text;
+        return text as T;
     }
 }
 
 export const hub = {
-    health: (): Promise<any> => request("/health"),
+    health: (baseUrl?: string): Promise<any> =>
+        request("/health", undefined, { ...loadConfig(), baseUrl: baseUrl ?? loadConfig().baseUrl }),
 
     /** 用 6 位配对码换长期令牌，与手机端同一流程，返回 {token, device_id} */
-    pair: (code: string, deviceName: string): Promise<any> =>
-        request("/pair", {
-            method: "POST",
-            body: JSON.stringify({ code, device_name: deviceName }),
-        }),
+    pair: (code: string, deviceName: string, baseUrl?: string): Promise<any> =>
+        request(
+            "/pair",
+            {
+                method: "POST",
+                body: JSON.stringify({ code, device_name: deviceName }),
+            },
+            { ...loadConfig(), baseUrl: baseUrl ?? loadConfig().baseUrl, token: "" },
+        ),
 
     briefingDay: (date: string): Promise<any> => request(`/briefing/day?date=${encodeURIComponent(date)}`),
 
@@ -134,13 +171,13 @@ export const hub = {
     setTodoDone: (id: number, done: boolean): Promise<any> =>
         request(`/todos/${id}`, { method: "PATCH", body: JSON.stringify({ done }) }),
 
-    routines: (persona: string): Promise<any> => request(`/routines?persona=${encodeURIComponent(persona)}`),
-
     sessions: (persona: string, limit = 30): Promise<any> =>
         request(`/tasks/sessions?persona=${encodeURIComponent(persona)}&limit=${limit}`),
 
-    sessionMessages: (id: string, persona: string, limit = 120): Promise<any> =>
-        request(`/tasks/sessions/${encodeURIComponent(id)}/messages?persona=${encodeURIComponent(persona)}&limit=${limit}`),
+    sessionMessages: (id: string, persona: string, limit = 120, before?: string): Promise<any> =>
+        request(
+            `/tasks/sessions/${encodeURIComponent(id)}/messages?persona=${encodeURIComponent(persona)}&limit=${limit}${before ? `&before=${encodeURIComponent(before)}` : ""}`,
+        ),
 
     memoryBundle: (persona: string): Promise<any> => request(`/memory/bundle?persona=${encodeURIComponent(persona)}`),
 
@@ -152,15 +189,55 @@ export const hub = {
     serviceTicket: (serviceId: string): Promise<any> =>
         request("/svc/ticket", { method: "POST", body: JSON.stringify({ service_id: serviceId }) }),
 
+    serviceFavAdd: (name: string, url: string): Promise<unknown> =>
+        request("/svc/fav/add", { method: "POST", body: JSON.stringify({ name, url, icon: "" }) }),
+    serviceFavDelete: (id: number): Promise<unknown> =>
+        request("/svc/fav/del", { method: "POST", body: JSON.stringify({ id }) }),
+    serviceFavOrder: (ids: number[]): Promise<unknown> =>
+        request("/svc/fav/order", { method: "POST", body: JSON.stringify({ ids }) }),
+    serviceOrder: (ids: string[]): Promise<unknown> =>
+        request("/svc/order", { method: "POST", body: JSON.stringify({ ids }) }),
+    vaultNote: (persona: string, name: string): Promise<unknown> =>
+        request(`/memory/vault/note?persona=${encodeURIComponent(persona)}&name=${encodeURIComponent(name)}`),
+    saveVaultNote: (persona: string, name: string, content: string): Promise<unknown> =>
+        request(
+            "/memory/vault/note",
+            { method: "POST", body: JSON.stringify({ persona, name, content }) },
+            loadConfig(),
+            30000,
+        ),
+    deleteVaultNote: (persona: string, name: string): Promise<unknown> =>
+        request(`/memory/vault/note?persona=${encodeURIComponent(persona)}&name=${encodeURIComponent(name)}`, {
+            method: "DELETE",
+        }),
+    routineHistory: (id: string, persona: string): Promise<unknown> =>
+        request(`/routines/${encodeURIComponent(id)}/history?persona=${encodeURIComponent(persona)}&limit=20`),
+    runRoutine: (id: string, persona: string): Promise<unknown> =>
+        request(
+            `/routines/${encodeURIComponent(id)}/run`,
+            { method: "POST", body: JSON.stringify({ persona }) },
+            loadConfig(),
+            60000,
+        ),
+    sessionDigest: (persona: string): Promise<unknown> =>
+        request(`/tasks/sessions/digest?persona=${encodeURIComponent(persona)}`),
+    revokeDevice: (id: string): Promise<unknown> => request(`/devices/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    connectorCatalog: (): Promise<unknown> => request("/catalog"),
+    refreshMcpServer: (id: number): Promise<unknown> =>
+        request(`/mcp/servers/${id}/refresh`, { method: "POST", body: "{}" }),
+    callConnector: (id: string, params: Record<string, unknown>): Promise<unknown> =>
+        request(`/connectors/${encodeURIComponent(id)}/call`, { method: "POST", body: JSON.stringify({ params }) }),
+
     // ---- 服务器 ----
     serverStatus: (): Promise<any> => request("/server/status"),
     serverHistory: (range = "24h"): Promise<any> => request(`/server/history?range=${encodeURIComponent(range)}`),
     serverServiceDetail: (key: string): Promise<any> => request(`/server/service?key=${encodeURIComponent(key)}`),
 
     // ---- 用量 ----
-    usageSummary: (): Promise<any> => request("/usage/summary"),
+    usageSummary: (range = "7d"): Promise<any> => request(`/usage/summary?range=${encodeURIComponent(range)}`),
 
     // ---- 模型与推理 ----
+    agentBundle: (persona: string): Promise<unknown> => request(`/agent/bundle?persona=${encodeURIComponent(persona)}`),
     agentModel: (persona?: string): Promise<any> =>
         request(`/agent/model${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
     agentCandidates: (persona?: string): Promise<any> =>
@@ -177,7 +254,8 @@ export const hub = {
         }),
 
     // ---- 凭据 / 插件 ----
-    agentCredentials: (): Promise<any> => request("/agent/credentials"),
+    agentCredentials: (withRefs = false): Promise<any> =>
+        request(`/agent/credentials${withRefs ? "?with_refs=1" : ""}`),
     agentPlugins: (): Promise<any> => request("/agent/plugins"),
 
     // ---- 记忆 ----
@@ -185,17 +263,16 @@ export const hub = {
         request(`/memory${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
     saveMemory: (persona: string, kind: "memory" | "profile", content: string): Promise<any> =>
         request("/memory", { method: "POST", body: JSON.stringify({ persona, kind, content }) }),
-    memoryVault: (persona?: string): Promise<any> =>
-        request(`/memory/vault${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
-    memoryVaultStatus: (): Promise<any> => request("/memory/vault/status"),
+    memoryVault: (persona = "default", q = ""): Promise<unknown> =>
+        request(`/memory/vault?persona=${encodeURIComponent(persona)}&q=${encodeURIComponent(q)}&limit=300`),
+    memoryVaultStatus: (persona = "default"): Promise<unknown> =>
+        request(`/memory/vault/status?persona=${encodeURIComponent(persona)}`),
 
     // ---- 技能 ----
     skills: (persona?: string): Promise<any> =>
         request(`/skills${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
     skillContent: (path: string, persona?: string): Promise<any> =>
-        request(
-            `/skills/${encodeURIComponent(path)}${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`,
-        ),
+        request(`/skills/${encodeURIComponent(path)}${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
     saveSkill: (path: string, persona: string, content: string): Promise<any> =>
         request(`/skills/${encodeURIComponent(path)}`, {
             method: "POST",
@@ -227,23 +304,27 @@ export const hub = {
             method: "PATCH",
             body: JSON.stringify(patch),
         }),
+    deleteRoutine: (id: string, persona?: string): Promise<any> =>
+        request(`/routines/${encodeURIComponent(id)}${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`, {
+            method: "DELETE",
+        }),
 
     // ---- 连接器 / MCP ----
     connectors: (): Promise<any> => request("/connectors"),
-    saveConnector: (name: string, config: any): Promise<any> =>
+    saveConnector: (name: string, config: Record<string, unknown>): Promise<any> =>
         request("/connectors", { method: "POST", body: JSON.stringify({ name, config }) }),
     mcpServers: (): Promise<any> => request("/mcp/servers"),
     addMcpServer: (name: string, url: string, token?: string): Promise<any> =>
         request("/mcp/servers", { method: "POST", body: JSON.stringify({ name, url, token }) }),
     deleteMcpServer: (id: number): Promise<any> => request(`/mcp/servers/${id}`, { method: "DELETE" }),
-    mcpCall: (server: string, tool: string, args: any): Promise<any> =>
-        request("/mcp/call", { method: "POST", body: JSON.stringify({ server, tool, args }) }),
+    mcpCall: (serverId: number, tool: string, args: Record<string, unknown>): Promise<any> =>
+        request("/mcp/call", { method: "POST", body: JSON.stringify({ server_id: serverId, tool, arguments: args }) }),
 
     // ---- 数据与隐私 ----
     retention: (): Promise<any> => request("/admin/retention"),
     setRetention: (notifyDays: number, locationDays: number): Promise<any> =>
         request("/admin/retention", {
-            method: "POST",
+            method: "PATCH",
             body: JSON.stringify({ notify_days: notifyDays, location_days: locationDays }),
         }),
 
@@ -270,30 +351,36 @@ export const hub = {
         request("/agent/model/test", { method: "POST", body: JSON.stringify({ key, persona }) }),
     testFallback: (persona?: string): Promise<any> =>
         request("/agent/fallback/test", { method: "POST", body: JSON.stringify({ persona }) }),
-    endpointModels: (baseUrl: string): Promise<any> =>
-        request(`/agent/endpoint/models?base_url=${encodeURIComponent(baseUrl)}`),
+    endpointModels: (baseUrl: string, keyEnv = ""): Promise<any> =>
+        request(
+            `/agent/endpoint/models?base_url=${encodeURIComponent(baseUrl)}${keyEnv ? `&key_env=${encodeURIComponent(keyEnv)}` : ""}`,
+        ),
 
     // ---- 凭据 / 辅助模型 ----
     setCredential: (name: string, value: string): Promise<any> =>
-        request("/agent/credentials", { method: "POST", body: JSON.stringify({ name, value }) }),
-    deleteCredential: (name: string): Promise<any> =>
-        request(`/agent/credentials/${encodeURIComponent(name)}`, { method: "DELETE" }),
-    saveAuxiliary: (persona: string, payload: any): Promise<any> =>
-        request("/agent/auxiliary", { method: "POST", body: JSON.stringify({ persona, ...payload }) }),
+        request("/agent/credentials", { method: "POST", body: JSON.stringify({ name, value }) }, loadConfig(), 40000),
+    deleteCredential: (name: string, force = false): Promise<any> =>
+        request(`/agent/credentials?name=${encodeURIComponent(name)}&force=${force ? "1" : "0"}`, { method: "DELETE" }),
+    saveAuxiliary: (persona: string, payload: Record<string, unknown>): Promise<any> =>
+        request(
+            "/agent/auxiliary",
+            { method: "POST", body: JSON.stringify({ persona, ...payload }) },
+            loadConfig(),
+            200000,
+        ),
 
     // ---- 候选池增删改 / 备注 / 备用链 ----
-    addCandidate: (payload: any, persona: string): Promise<any> =>
+    addCandidate: (payload: Record<string, unknown>, persona: string): Promise<any> =>
         request("/agent/candidates", { method: "POST", body: JSON.stringify({ persona, ...payload }) }),
-    updateCandidate: (key: string, persona: string, fields: any, scope = "persona"): Promise<any> =>
-        request(
-            `/agent/candidates/${encodeURIComponent(key)}?persona=${encodeURIComponent(persona)}&scope=${scope}`,
-            { method: "PATCH", body: JSON.stringify(fields) },
-        ),
+    updateCandidate: (key: string, persona: string, fields: Record<string, unknown>, scope = "persona"): Promise<any> =>
+        request(`/agent/candidates/${encodeURIComponent(key)}?persona=${encodeURIComponent(persona)}&scope=${scope}`, {
+            method: "PATCH",
+            body: JSON.stringify(fields),
+        }),
     deleteCandidate: (key: string, persona: string, scope = "persona"): Promise<any> =>
-        request(
-            `/agent/candidates/${encodeURIComponent(key)}?persona=${encodeURIComponent(persona)}&scope=${scope}`,
-            { method: "DELETE" },
-        ),
+        request(`/agent/candidates/${encodeURIComponent(key)}?persona=${encodeURIComponent(persona)}&scope=${scope}`, {
+            method: "DELETE",
+        }),
     testCandidate: (key: string, persona: string): Promise<any> =>
         request(`/agent/candidates/${encodeURIComponent(key)}/test`, {
             method: "POST",
@@ -312,10 +399,9 @@ export const hub = {
                 api_mode: "chat_completions",
             }),
         }),
-    saveFallback: (persona: string, chain: any[]): Promise<any> =>
-        request("/agent/fallback", { method: "POST", body: JSON.stringify({ persona, chain }) }),
+    saveFallback: (persona: string, chain: unknown[]): Promise<any> =>
+        request("/agent/fallback", { method: "POST", body: JSON.stringify({ persona, chain }) }, loadConfig(), 90000),
 };
-
 
 /** 把接口返回的 items 安全地取成数组 */
 export function itemsOf(data: any): any[] {

@@ -12,7 +12,7 @@ import { getConfig } from "./config.js";
 import { consumeDisplayMediaCallback } from "./displayMediaCallback.js";
 import { clearData } from "./store.js";
 
-const { ipcHandlers, mockStore, send, randomArray, defaultSession } = vi.hoisted(() => ({
+const { ipcHandlers, mockStore, send, randomArray, defaultSession, hubFetch } = vi.hoisted(() => ({
     ipcHandlers: {} as Record<string, (...args: unknown[]) => unknown>,
     defaultSession: {
         setSpellCheckerEnabled: vi.fn<(enable: boolean) => void>(),
@@ -30,6 +30,7 @@ const { ipcHandlers, mockStore, send, randomArray, defaultSession } = vi.hoisted
     },
     send: vi.fn(),
     randomArray: vi.fn<(len: number) => Promise<string>>(),
+    hubFetch: vi.fn<typeof fetch>(),
 }));
 
 vi.mock("electron", () => ({
@@ -54,6 +55,7 @@ vi.mock("electron", () => ({
     },
     nativeImage: { createFromBuffer: vi.fn() },
     session: { defaultSession },
+    net: { fetch: hubFetch },
 }));
 
 vi.mock("./store.js", () => ({
@@ -72,6 +74,26 @@ vi.mock("./config.js");
 await import("./ipc.js");
 
 const ARGS = ["@alice:example.org", "DEVICEID"];
+
+describe("Qing hub request", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it("allows long operations and caps their timeout at four minutes", async () => {
+        const timeout = vi.spyOn(AbortSignal, "timeout");
+        hubFetch.mockResolvedValueOnce(new Response('{"ok":true}'));
+        const request = { url: "https://hub.example/diagnose", timeoutMs: 600000, method: "POST", body: "{}" };
+        await expect(ipcHandlers["qingHubRequest"]({}, request)).resolves.toMatchObject({ ok: true, status: 200 });
+        expect(timeout).toHaveBeenCalledWith(240000);
+        expect(hubFetch).toHaveBeenLastCalledWith(request.url, expect.objectContaining({ method: "POST", body: "{}" }));
+    });
+
+    it("keeps the default timeout for ordinary reads", async () => {
+        const timeout = vi.spyOn(AbortSignal, "timeout");
+        hubFetch.mockResolvedValueOnce(new Response("{}"));
+        await ipcHandlers["qingHubRequest"]({}, { url: "https://hub.example/health" });
+        expect(timeout).toHaveBeenCalledWith(10000);
+    });
+});
 
 async function callIpc(name: string, id = 1, args: unknown[] = ARGS): Promise<void> {
     await ipcHandlers["ipcCall"]({}, { id, name, args });

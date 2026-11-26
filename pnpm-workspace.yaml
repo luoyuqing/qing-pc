@@ -5,6 +5,15 @@ minimumReleaseAgeStrict: true
 dedupePeerDependents: true
 dedupePeers: true
 
+# Install the Windows search binary when producing a ZIP from Linux.
+supportedArchitectures:
+    os:
+        - current
+        - win32
+    cpu:
+        - current
+        - x64
+
 packages:
     - "apps/*"
     - "packages/*"

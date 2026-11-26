@@ -1,6 +1,15 @@
-/* Qing PC · 面板通用组件（自绘，避免依赖 Element 内部设计系统的版本变动） */
+/*
+Copyright 2026 Qing PC contributors
 
+SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial
+Please see LICENSE in the repository root for full details.
+*/
+
+/* Qing PC · Element 主题下的通用面板控件 */
+
+import { _t } from "../languageHandler";
 import React from "react";
+import { Heading } from "@vector-im/compound-web";
 import { palette } from "./theme";
 
 export const PageHeader: React.FC<{
@@ -8,10 +17,11 @@ export const PageHeader: React.FC<{
     subtitle?: string;
     right?: React.ReactNode;
     onBack?: () => void;
-}> = ({ title, subtitle, right, onBack }) => {
+}> = ({ title, subtitle, right, onBack }): React.ReactNode => {
     const p = palette();
     return (
         <div
+            className="mx_QingShell_header"
             style={{
                 display: "flex",
                 alignItems: "center",
@@ -33,29 +43,34 @@ export const PageHeader: React.FC<{
                         padding: "2px 4px",
                         flexShrink: 0,
                     }}
-                    title="返回"
+                    title={_t("qing|text_572cf45b")}
+                    aria-label={_t("qing|text_572cf45b")}
                 >
                     ←
                 </button>
             )}
             <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: 21, fontWeight: 600, color: p.text, lineHeight: 1.2 }}>{title}</div>
-                {subtitle && (
-                    <div style={{ fontSize: 12, color: p.textDim, marginTop: 3 }}>{subtitle}</div>
-                )}
+                <Heading as="h1" size="md" style={{ color: p.text }}>
+                    {title}
+                </Heading>
+                {subtitle && <div style={{ fontSize: 12, color: p.textDim, marginTop: 3 }}>{subtitle}</div>}
             </div>
-            {right && <div style={{ display: "flex", alignItems: "center", gap: 8 }}>{right}</div>}
+            {right && (
+                <div className="mx_QingShell_headerActions" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {right}
+                </div>
+            )}
         </div>
     );
 };
 
 export const Button: React.FC<{
     children: React.ReactNode;
-    onClick?: () => void;
+    onClick?: React.MouseEventHandler<HTMLButtonElement>;
     disabled?: boolean;
     variant?: "primary" | "ghost";
     title?: string;
-}> = ({ children, onClick, disabled, variant = "ghost", title }) => {
+}> = ({ children, onClick, disabled, variant = "ghost", title }): React.ReactNode => {
     const p = palette();
     const primary = variant === "primary";
     return (
@@ -86,12 +101,13 @@ export const Pill: React.FC<{
     label: string;
     active: boolean;
     onClick: () => void;
-}> = ({ label, active, onClick }) => {
+}> = ({ label, active, onClick }): React.ReactNode => {
     const p = palette();
     return (
         <button
             type="button"
             onClick={onClick}
+            aria-pressed={active}
             style={{
                 padding: "6px 14px",
                 fontSize: 13,
@@ -112,11 +128,23 @@ export const Card: React.FC<{
     children: React.ReactNode;
     onClick?: () => void;
     style?: React.CSSProperties;
-}> = ({ children, onClick, style }) => {
+}> = ({ children, onClick, style }): React.ReactNode => {
     const p = palette();
     return (
         <div
-            onClick={onClick}
+            role={onClick ? "button" : undefined}
+            tabIndex={onClick ? 0 : undefined}
+            onKeyDown={(event) => {
+                if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+                    event.preventDefault();
+                    event.currentTarget.click();
+                }
+            }}
+            onClick={(event) => {
+                const target = event.target as HTMLElement;
+                if (target !== event.currentTarget && target.closest("button, input, select, textarea, a")) return;
+                onClick?.();
+            }}
             style={{
                 padding: 14,
                 borderRadius: 12,
@@ -134,32 +162,44 @@ export const Card: React.FC<{
 export const Scroll: React.FC<{ children: React.ReactNode; style?: React.CSSProperties }> = ({
     children,
     style,
-}) => (
-    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "4px 24px 32px", ...style }}>
-        {children}
+}): React.ReactNode => (
+    <div
+        className="mx_QingShell_scroll"
+        style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "4px 24px 32px", ...style }}
+    >
+        <div className="mx_QingShell_content">{children}</div>
     </div>
 );
 
-export const Loading: React.FC<{ label?: string }> = ({ label = "加载中…" }) => {
+export const Loading: React.FC<{ label?: string }> = ({ label = _t("qing|text_4927a53b") }): React.ReactNode => {
     const p = palette();
-    return <div style={{ padding: 40, textAlign: "center", color: p.textDim, fontSize: 13 }}>{label}</div>;
+    return (
+        <div role="status" style={{ padding: 40, textAlign: "center", color: p.textDim, fontSize: 13 }}>
+            {label}
+        </div>
+    );
 };
 
-export const ErrorBox: React.FC<{ message: string; onRetry?: () => void }> = ({ message, onRetry }) => {
+export const ErrorBox: React.FC<{ message: string; onRetry?: () => void }> = ({
+    message,
+    onRetry,
+}): React.ReactNode => {
     const p = palette();
     return (
         <div style={{ padding: "24px 0" }}>
-            <div style={{ color: p.danger, fontSize: 13, lineHeight: 1.6, wordBreak: "break-word" }}>{message}</div>
+            <div role="alert" style={{ color: p.danger, fontSize: 13, lineHeight: 1.6, wordBreak: "break-word" }}>
+                {message}
+            </div>
             {onRetry && (
                 <div style={{ marginTop: 12 }}>
-                    <Button onClick={onRetry}>重试</Button>
+                    <Button onClick={onRetry}>{_t("qing|text_b8784c8d")}</Button>
                 </div>
             )}
         </div>
     );
 };
 
-export const Empty: React.FC<{ text: string }> = ({ text }) => {
+export const Empty: React.FC<{ text: string }> = ({ text }): React.ReactNode => {
     const p = palette();
     return <div style={{ padding: 40, textAlign: "center", color: p.textDim, fontSize: 13 }}>{text}</div>;
 };

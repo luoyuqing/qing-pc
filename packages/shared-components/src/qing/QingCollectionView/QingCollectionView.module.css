@@ -1,0 +1,92 @@
+/*
+Copyright 2026 Qing PC contributors
+
+SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial
+Please see LICENSE in the repository root for full details.
+*/
+
+.view {
+    min-height: 0;
+    height: 100%;
+    padding: var(--cpd-space-6x);
+    box-sizing: border-box;
+    color: var(--cpd-color-text-primary);
+    background: var(--cpd-color-bg-canvas-default);
+}
+.title {
+    flex: 1;
+    min-width: 0;
+}
+.hint {
+    color: var(--cpd-color-text-secondary);
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+.error {
+    color: var(--cpd-color-text-critical-primary);
+}
+.content {
+    min-height: 0;
+    overflow: auto;
+    scrollbar-gutter: stable;
+}
+.form,
+.content {
+    width: 100%;
+    max-width: 72rem;
+    margin-inline: auto;
+}
+.form {
+    display: grid;
+    gap: var(--cpd-space-4x);
+    margin-block-end: var(--cpd-space-5x);
+}
+.field {
+    display: grid;
+    gap: var(--cpd-space-2x);
+}
+.input {
+    box-sizing: border-box;
+    width: 100%;
+    padding: var(--cpd-space-3x);
+    border: 1px solid var(--cpd-color-border-interactive-secondary);
+    border-radius: var(--cpd-space-2x);
+    background: var(--cpd-color-bg-canvas-default);
+    color: var(--cpd-color-text-primary);
+    font: var(--cpd-font-body-md-regular);
+}
+textarea.input {
+    min-height: 16rem;
+    resize: vertical;
+}
+.input:focus-visible {
+    outline: 2px solid var(--cpd-color-border-focused);
+    outline-offset: var(--cpd-space-1x);
+}
+.row,
+.confirmation {
+    padding: var(--cpd-space-4x);
+    border: 1px solid var(--cpd-color-border-interactive-secondary);
+    background: var(--cpd-color-bg-subtle-primary);
+    border-radius: var(--cpd-space-3x);
+}
+.resultBox {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cpd-space-2x);
+    padding: var(--cpd-space-3x);
+    border: 1px solid var(--cpd-color-border-disabled);
+    background: var(--cpd-color-bg-subtle-primary);
+    border-radius: var(--cpd-space-2x);
+}
+.result {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font: var(--cpd-font-body-sm-regular);
+}
+@media (width < 40rem) {
+    .view {
+        padding: var(--cpd-space-3x);
+    }
+}

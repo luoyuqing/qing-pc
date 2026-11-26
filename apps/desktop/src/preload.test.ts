@@ -77,4 +77,15 @@ describe("preload x509 ipc", () => {
         await expect(x509.signData("SERIAL1", data)).resolves.toBe(result);
         expectInvoked("signData", "SERIAL1", data);
     });
+
+    it("forwards the hub operation timeout unchanged to the main process", async () => {
+        const hub = exposed.get("qingHub") as {
+            request: (req: { url: string; timeoutMs: number }) => Promise<unknown>;
+        };
+        const request = { url: "https://hub.example/diagnose", timeoutMs: 180000 };
+        const result = { ok: true, status: 200, body: "{}" };
+        invoke.mockResolvedValueOnce(result);
+        await expect(hub.request(request)).resolves.toBe(result);
+        expect(invoke).toHaveBeenLastCalledWith("qingHubRequest", request);
+    });
 });

@@ -1,6 +1,16 @@
+/*
+Copyright 2026 Qing PC contributors
+
+SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial
+Please see LICENSE in the repository root for full details.
+*/
+
 /* Qing PC · 通用列表页：把 device-hub 的 {items:[...]} 渲染成可读列表 */
 
+import { _t } from "../../languageHandler";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { formatHumanResult } from "../data";
+import { friendlyError } from "../status";
 import { Button, Card, Empty, ErrorBox, Loading, PageHeader, Scroll } from "../ui";
 import { palette } from "../theme";
 
@@ -31,13 +41,22 @@ function pick(item: any, col: Column): React.ReactNode {
     if (col.render) return col.render(item);
     const v = item?.[col.key];
     if (v === null || v === undefined) return "—";
-    if (typeof v === "boolean") return v ? "是" : "否";
+    if (typeof v === "boolean") return v ? _t("qing|text_b5141d3d") : _t("qing|text_0c70665b");
     if (Array.isArray(v)) return v.length ? v.join("、") : "—";
-    if (typeof v === "object") return JSON.stringify(v);
+    if (typeof v === "object") return formatHumanResult(v);
     return `${v}`;
 }
 
-export const ListPage: React.FC<Props> = ({ title, subtitle, loader, columns, emptyText, hint, onItemClick, onBack }) => {
+export const ListPage: React.FC<Props> = ({
+    title,
+    subtitle,
+    loader,
+    columns,
+    emptyText,
+    hint,
+    onItemClick,
+    onBack,
+}): React.ReactNode => {
     const [items, setItems] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -55,7 +74,7 @@ export const ListPage: React.FC<Props> = ({ title, subtitle, loader, columns, em
             const list = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
             setItems(list);
         } catch (e) {
-            setError((e as Error).message);
+            setError(friendlyError(e));
         }
         setLoading(false);
     }, []);
@@ -73,7 +92,7 @@ export const ListPage: React.FC<Props> = ({ title, subtitle, loader, columns, em
                 title={title}
                 subtitle={subtitle}
                 onBack={onBack}
-                right={<Button onClick={() => setTick((t) => t + 1)}>刷新</Button>}
+                right={<Button onClick={() => setTick((t) => t + 1)}>{_t("qing|text_aee88743")}</Button>}
             />
             {hint && (
                 <div style={{ padding: "0 24px 10px", fontSize: 12, color: p.textDim, lineHeight: 1.6 }}>{hint}</div>
@@ -85,7 +104,7 @@ export const ListPage: React.FC<Props> = ({ title, subtitle, loader, columns, em
                     <ErrorBox message={error} onRetry={() => setTick((t) => t + 1)} />
                 </div>
             ) : items.length === 0 ? (
-                <Empty text={emptyText || "暂无数据。"} />
+                <Empty text={emptyText || _t("qing|text_ef3763ae")} />
             ) : (
                 <Scroll>
                     {items.map((item, i) => (
@@ -103,7 +122,10 @@ export const ListPage: React.FC<Props> = ({ title, subtitle, loader, columns, em
                                 const val = pick(item, col);
                                 if (val === "—" || val === "" || val === null) return null;
                                 return (
-                                    <div key={col.key} style={{ fontSize: 12.5, color: p.textDim, marginTop: 3, lineHeight: 1.55 }}>
+                                    <div
+                                        key={col.key}
+                                        style={{ fontSize: 12.5, color: p.textDim, marginTop: 3, lineHeight: 1.55 }}
+                                    >
                                         {col.label && <span style={{ opacity: 0.75 }}>{col.label}：</span>}
                                         <span style={{ color: p.text }}>{val}</span>
                                     </div>

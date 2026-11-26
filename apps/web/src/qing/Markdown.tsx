@@ -1,10 +1,21 @@
 /*
+Copyright 2026 Qing PC contributors
+
+SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial
+Please see LICENSE in the repository root for full details.
+*/
+
+/*
 Qing PC · 极简 Markdown 渲染
 只处理简报/记忆里实际出现的语法：标题、无序列表、粗体、行内代码。
 复杂语法退化为纯文本，不做完整解析。
 */
 
+// Repeated text and arbitrary nested values have no stable IDs; these nodes hold no row state.
+/* oxlint-disable react/no-array-index-key */
+
 import React from "react";
+import { Heading } from "@vector-im/compound-web";
 import { palette } from "./theme";
 
 function inline(text: string, keyPrefix: string): React.ReactNode[] {
@@ -46,7 +57,7 @@ function inline(text: string, keyPrefix: string): React.ReactNode[] {
     return nodes;
 }
 
-export const Markdown: React.FC<{ text: string }> = ({ text }) => {
+export const Markdown: React.FC<{ text: string }> = ({ text }): React.ReactNode => {
     const p = palette();
     const lines = (text || "").split("\n");
 
@@ -58,23 +69,23 @@ export const Markdown: React.FC<{ text: string }> = ({ text }) => {
 
                 if (line.startsWith("### ")) {
                     return (
-                        <div key={i} style={{ fontWeight: 600, fontSize: 14, marginTop: 10 }}>
+                        <Heading as="h4" size="sm" key={i} style={{ marginTop: 10 }}>
                             {inline(line.slice(4), `h3-${i}`)}
-                        </div>
+                        </Heading>
                     );
                 }
                 if (line.startsWith("## ")) {
                     return (
-                        <div key={i} style={{ fontWeight: 600, fontSize: 16, marginTop: 14 }}>
+                        <Heading as="h3" size="sm" key={i} style={{ marginTop: 14 }}>
                             {inline(line.slice(3), `h2-${i}`)}
-                        </div>
+                        </Heading>
                     );
                 }
                 if (line.startsWith("# ")) {
                     return (
-                        <div key={i} style={{ fontWeight: 700, fontSize: 19, marginTop: 16 }}>
+                        <Heading as="h2" size="md" key={i} style={{ marginTop: 16 }}>
                             {inline(line.slice(2), `h1-${i}`)}
-                        </div>
+                        </Heading>
                     );
                 }
                 if (line.startsWith("- ") || line.startsWith("* ")) {

@@ -1,4 +1,11 @@
 /*
+Copyright 2026 Qing PC contributors
+
+SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial
+Please see LICENSE in the repository root for full details.
+*/
+
+/*
 Qing PC · 人设切换器
 
 手机端不是「全局一个人设」，而是每个页面各自在标题栏放一个切换菜单
@@ -7,6 +14,7 @@ Qing PC · 人设切换器
 换页时沿用上次的选择。
 */
 
+import { _t } from "../languageHandler";
 import React, { useEffect, useState } from "react";
 import { hub } from "./hub";
 import { palette } from "./theme";
@@ -49,12 +57,14 @@ export const PersonaPicker: React.FC<{
     onChange: (id: string) => void;
     /** 卡片内使用时可以关掉底色 */
     compact?: boolean;
-}> = ({ value, onChange, compact }) => {
+    /** 外部刷新触发：当人设列表为空时重试拉取 */
+    refreshKey?: number;
+}> = ({ value, onChange, compact, refreshKey }): React.ReactNode => {
     const [items, setItems] = useState<Persona[]>(cache ?? []);
-    const [open, setOpen] = useState(false);
     const p = palette();
 
     useEffect(() => {
+        if (items.length > 0 && refreshKey) return;
         let alive = true;
         void loadPersonas().then((list) => {
             if (alive) setItems(list);
@@ -62,85 +72,28 @@ export const PersonaPicker: React.FC<{
         return () => {
             alive = false;
         };
-    }, []);
+    }, [refreshKey, items.length]);
 
-    const current = items.find((x) => x.id === value);
-    const text = current ? current.label : value;
-
-    if (items.length === 0) {
-        // 拉不到列表就不显示切换器，避免误导
-        return null;
-    }
-
+    if (items.length === 0) return null;
     return (
-        <div style={{ position: "relative", flexShrink: 0 }}>
-            <button
-                type="button"
-                onClick={() => setOpen((o) => !o)}
-                style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    padding: compact ? "4px 8px" : "5px 10px",
-                    fontSize: 12,
-                    borderRadius: 8,
-                    cursor: "pointer",
-                    border: `1px solid ${open ? p.accent : p.border}`,
-                    background: p.bgAlt,
-                    color: p.text,
-                    maxWidth: 160,
-                }}
-                title="切换人设"
-            >
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{text}</span>
-                <span style={{ color: p.textDim, fontSize: 10 }}>▾</span>
-            </button>
-            {open && (
-                <>
-                    {/* 点外面关闭 */}
-                    <div
-                        onClick={() => setOpen(false)}
-                        style={{ position: "fixed", inset: 0, zIndex: 40, background: "transparent" }}
-                    />
-                    <div
-                        style={{
-                            position: "absolute",
-                            top: "calc(100% + 4px)",
-                            right: 0,
-                            minWidth: 160,
-                            zIndex: 41,
-                            borderRadius: 10,
-                            border: `1px solid ${p.border}`,
-                            background: p.bg,
-                            boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
-                            overflow: "hidden",
-                        }}
-                    >
-                        {items.map((x) => (
-                            <div
-                                key={x.id}
-                                onClick={() => {
-                                    setOpen(false);
-                                    onChange(x.id);
-                                }}
-                                style={{
-                                    padding: "8px 12px",
-                                    fontSize: 12.5,
-                                    cursor: "pointer",
-                                    color: x.id === value ? p.accent : p.text,
-                                    background: x.id === value ? p.accentSoft : "transparent",
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    gap: 10,
-                                }}
-                            >
-                                <span>{x.label}</span>
-                                {x.id === value && <span>✓</span>}
-                            </div>
-                        ))}
-                    </div>
-                </>
-            )}
-        </div>
+        <select
+            aria-label={_t("qing|text_8eea4548")}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            style={{
+                padding: compact ? "4px 8px" : "5px 10px",
+                borderRadius: 8,
+                border: `1px solid ${p.border}`,
+                background: p.bgAlt,
+                color: p.text,
+                maxWidth: 180,
+            }}
+        >
+            {items.map((item) => (
+                <option key={item.id} value={item.id}>
+                    {item.label}
+                </option>
+            ))}
+        </select>
     );
 };

@@ -16,10 +16,13 @@ import {
     type BeforeBuildContext,
     type BuildResult,
     type CustomWindowsSign,
+    Arch,
     log,
 } from "electron-builder";
 import type { WindowsSignToolManager } from "app-builder-lib";
 import { LogMessageByKey } from "app-builder-lib/out/node-module-collector/moduleManager.js";
+
+import { isWindowsCrossBuild, assertWindowsSearchBinary } from "./scripts/windows-cross-build.ts";
 
 import pkg from "./package.json" with { type: "json" };
 import { createCachedSign, getAuthenticodeSignature } from "./scripts/sign-cache.ts";
@@ -147,6 +150,8 @@ interface Configuration extends BaseConfiguration {
  * @type {import('electron-builder').Configuration}
  * @see https://www.electron.build/configuration/configuration
  */
+const windowsCrossBuild = isWindowsCrossBuild(os.platform(), process.argv);
+
 const config: Omit<Writable<Configuration>, "electronFuses" | "publish"> & {
     // Make all fuses required to ensure they are all explicitly specified
     electronFuses: Required<Configuration["electronFuses"]>;
@@ -174,6 +179,8 @@ const config: Omit<Writable<Configuration>, "electronFuses" | "publish"> & {
     files: [
         "package.json",
         "lib/**",
+        // Optional smart-card modules require MSVC; exclude host binaries from Windows cross-builds.
+        ...(windowsCrossBuild ? ["!**/node_modules/pkcs11js/**", "!**/node_modules/graphene-pk11/**"] : []),
         // electron-builder strips node-gyp's Make build leftovers from native modules but not MSBuild's on Windows
         "!**/node_modules/*/build/*.{vcxproj,vcxproj.filters}",
         "!**/node_modules/*/build/Release/{obj,*.iobj,*.ipdb,*.exp,*.lib}",
@@ -257,7 +264,7 @@ const config: Omit<Writable<Configuration>, "electronFuses" | "publish"> & {
     },
     nativeRebuilder: "sequential",
     nodeGypRebuild: false,
-    npmRebuild: true,
+    npmRebuild: !windowsCrossBuild,
     beforeBuild: async (context: BeforeBuildContext) => {
         // Assert that the webapp.asar file exists
         try {
@@ -282,6 +289,9 @@ const config: Omit<Writable<Configuration>, "electronFuses" | "publish"> & {
     },
     afterPack: async (context: AfterPackContext) => {
         await pruneSeshatBinaries(context);
+        if (context.electronPlatformName === "win32") {
+            await assertWindowsSearchBinary(context.packager.getResourcesDir(context.appOutDir), Arch[context.arch]);
+        }
         // Runs after pruning, as the binaries for other architectures would fail the checks
         await assertNativeLibraries(context);
     },
@@ -345,7 +355,7 @@ if (process.env.ED_SIGNTOOL_SUBJECT_NAME && process.env.ED_SIGNTOOL_THUMBPRINT) 
     config.win.signtoolOptions!.sign = signUnlessSigned;
 }
 
-if (os.platform() === "linux") {
+if (os.platform() === "linux" && !windowsCrossBuild) {
     // Electron crashes on debian if there's a space in the path.
     // https://github.com/vector-im/element-web/issues/13171
     config.extraMetadata.productName = config.extraMetadata.productName.replace(/ /g, "-");

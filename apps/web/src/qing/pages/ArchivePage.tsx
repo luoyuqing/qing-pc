@@ -1,4 +1,11 @@
 /*
+Copyright 2026 Qing PC contributors
+
+SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial
+Please see LICENSE in the repository root for full details.
+*/
+
+/*
 Qing PC · 归档
 归档 = 给房间打上 u.qing.archived tag：
 - 聊天列表里隐藏（见 stores/room-list-v3/isRoomVisible.ts 与 RoomListStoreV3.getSections）
@@ -8,14 +15,14 @@ tag 存在服务端，换一台 PC 登录同一账号也能看到一致的归档
 注：手机版 qing 的归档存在 SharedPreferences（本机），两端不互通，这是手机端原有设计。
 */
 
+import { _t } from "../../languageHandler";
 import React, { useCallback, useEffect, useState } from "react";
+import { type Room } from "matrix-js-sdk/src/matrix";
+import { subscribeRoomChanges } from "../room-listeners";
 import { MatrixClientPeg } from "../../MatrixClientPeg";
 import { QING_ARCHIVE_TAG } from "../../stores/room-list-v3/isRoomVisible";
-import { Button, Card, Empty, PageHeader, Scroll } from "../ui";
+import { Button, Card, Empty, ErrorBox, PageHeader, Scroll } from "../ui";
 import { palette } from "../theme";
-
-const ROOM_TAGS_EVENT = "Room.tags";
-const ROOM_UNREAD_EVENT = "Room.unread_notifications";
 
 interface RoomInfo {
     id: string;
@@ -24,7 +31,11 @@ interface RoomInfo {
     unread: number;
 }
 
-export const ArchivePage: React.FC<{ onOpenRoom: (roomId: string) => void }> = ({ onOpenRoom }) => {
+export const ArchivePage: React.FC<{ onOpenRoom: (roomId: string) => void; onBack?: () => void }> = ({
+    onOpenRoom,
+    onBack,
+}): React.ReactNode => {
+    const [error, setError] = useState<string | null>(null);
     const [archived, setArchived] = useState<RoomInfo[]>([]);
     const [allRooms, setAllRooms] = useState<RoomInfo[]>([]);
     const [picking, setPicking] = useState(false);
@@ -42,9 +53,9 @@ export const ArchivePage: React.FC<{ onOpenRoom: (roomId: string) => void }> = (
 
     const refresh = useCallback(() => {
         if (!client) return;
-        const rooms: any[] = client.getRooms?.() || [];
+        const rooms = client.getRooms();
         const joined = rooms.filter((r) => r?.getMyMembership?.() === "join");
-        const map = (r: any): RoomInfo => ({
+        const map = (r: Room): RoomInfo => ({
             id: r.roomId,
             name: r.name || r.roomId,
             unread: r.getUnreadNotificationCount?.() ?? 0,
@@ -57,35 +68,29 @@ export const ArchivePage: React.FC<{ onOpenRoom: (roomId: string) => void }> = (
     useEffect(() => {
         refresh();
         if (!client) return;
-        // 打/撤 tag 会触发 Room.tags，列表随之刷新
-        client.on(ROOM_TAGS_EVENT as any, refresh);
-        client.on(ROOM_UNREAD_EVENT as any, refresh);
-        return () => {
-            client.off(ROOM_TAGS_EVENT as any, refresh);
-            client.off(ROOM_UNREAD_EVENT as any, refresh);
-        };
+        return subscribeRoomChanges(client, refresh);
     }, [client, refresh]);
 
-    const archive = async (roomId: string) => {
+    const archive = async (roomId: string): Promise<void> => {
         if (!client) return;
         setBusy(roomId);
         try {
             await client.setRoomTag(roomId, QING_ARCHIVE_TAG, { order: 0.5 });
             refresh();
         } catch (e) {
-            window.alert(`归档失败：${(e as Error).message}`);
+            setError(_t("qing|text_162dff12", { v0: (e as Error).message }));
         }
         setBusy(null);
     };
 
-    const unarchive = async (roomId: string) => {
+    const unarchive = async (roomId: string): Promise<void> => {
         if (!client) return;
         setBusy(roomId);
         try {
             await client.deleteRoomTag(roomId, QING_ARCHIVE_TAG);
             refresh();
         } catch (e) {
-            window.alert(`取消归档失败：${(e as Error).message}`);
+            setError(_t("qing|text_c60abf39", { v0: (e as Error).message }));
         }
         setBusy(null);
     };
@@ -98,17 +103,24 @@ export const ArchivePage: React.FC<{ onOpenRoom: (roomId: string) => void }> = (
     return (
         <>
             <PageHeader
-                title="归档"
-                subtitle={`已归档 ${archived.length} 个会话 · 已从聊天列表隐藏`}
-                right={<Button onClick={() => setPicking((v) => !v)}>{picking ? "完成" : "归档会话"}</Button>}
+                title={_t("qing|text_5292ab1a")}
+                onBack={onBack}
+                subtitle={_t("qing|text_2f1f4055", { v0: archived.length })}
+                right={
+                    <Button onClick={() => setPicking((v) => !v)}>
+                        {picking ? _t("qing|text_c0b3fbff") : _t("qing|text_0a388587")}
+                    </Button>
+                }
             />
 
             {picking && (
                 <div style={{ padding: "0 24px 12px", flexShrink: 0 }}>
                     <input
+                        type="search"
+                        aria-label={_t("qing|text_44ce7ae9")}
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
-                        placeholder="搜索要归档的会话…"
+                        placeholder={_t("qing|text_808c6a3f")}
                         style={{
                             width: "100%",
                             boxSizing: "border-box",
@@ -125,10 +137,12 @@ export const ArchivePage: React.FC<{ onOpenRoom: (roomId: string) => void }> = (
             )}
 
             <Scroll>
+                {error && <ErrorBox message={error} />}
                 {picking ? (
                     <>
                         <div style={{ fontSize: 12, color: p.textDim, marginBottom: 8 }}>
-                            点一下即归档，并立即从聊天列表消失（{candidates.length} 个可选）
+                            {_t("qing|text_dec83d8f")}
+                            {candidates.length} {_t("qing|text_e4e1048e")}
                         </div>
                         {candidates.slice(0, 200).map((r) => (
                             <Card
@@ -137,9 +151,7 @@ export const ArchivePage: React.FC<{ onOpenRoom: (roomId: string) => void }> = (
                                 style={{ marginBottom: 6, padding: "10px 14px", opacity: busy === r.id ? 0.5 : 1 }}
                             >
                                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                    <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: p.text }}>
-                                        {r.name}
-                                    </div>
+                                    <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: p.text }}>{r.name}</div>
                                     {r.unread > 0 && (
                                         <span
                                             style={{
@@ -160,27 +172,36 @@ export const ArchivePage: React.FC<{ onOpenRoom: (roomId: string) => void }> = (
                                         </span>
                                     )}
                                     <span style={{ fontSize: 11.5, color: p.textDim }}>
-                                        {busy === r.id ? "归档中…" : "归档"}
+                                        {busy === r.id ? _t("qing|text_7763947b") : _t("qing|text_5292ab1a")}
                                     </span>
                                 </div>
                             </Card>
                         ))}
-                        {candidates.length === 0 && <Empty text="没有可归档的会话。" />}
+                        {candidates.length === 0 && <Empty text={_t("qing|text_9a34c06b")} />}
                     </>
                 ) : archived.length === 0 ? (
-                    <Empty text="还没有归档的会话。点右上角「归档会话」把不常看的会话收起来，它们会从聊天列表消失。" />
+                    <Empty text={_t("qing|text_67a4cfac")} />
                 ) : (
                     archived.map((r) => (
                         <Card key={r.id} style={{ marginBottom: 8 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                 <div
+                                    role="button"
+                                    tabIndex={0}
+                                    onKeyDown={(event) => {
+                                        if (
+                                            event.target === event.currentTarget &&
+                                            (event.key === "Enter" || event.key === " ")
+                                        ) {
+                                            event.preventDefault();
+                                            event.currentTarget.click();
+                                        }
+                                    }}
                                     onClick={() => onOpenRoom(r.id)}
                                     style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
                                 >
                                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                        <span style={{ fontSize: 13.5, color: p.text, fontWeight: 500 }}>
-                                            {r.name}
-                                        </span>
+                                        <span style={{ fontSize: 13.5, color: p.text, fontWeight: 500 }}>{r.name}</span>
                                         {r.unread > 0 && (
                                             <span
                                                 style={{
@@ -202,11 +223,13 @@ export const ArchivePage: React.FC<{ onOpenRoom: (roomId: string) => void }> = (
                                         )}
                                     </div>
                                     <div style={{ fontSize: 11.5, color: p.textDim, marginTop: 2 }}>
-                                        {r.unread > 0 ? `${r.unread} 条未读` : "点击打开"}
+                                        {r.unread > 0
+                                            ? _t("qing|text_e3c359e2", { v0: r.unread })
+                                            : _t("qing|text_d4024568")}
                                     </div>
                                 </div>
                                 <Button disabled={busy === r.id} onClick={() => void unarchive(r.id)}>
-                                    {busy === r.id ? "…" : "取消归档"}
+                                    {busy === r.id ? "…" : _t("qing|text_be235f67")}
                                 </Button>
                             </div>
                         </Card>

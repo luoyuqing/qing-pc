@@ -737,7 +737,10 @@ class LoggedInView extends React.Component<IProps, IState> {
                     style={{ position: "relative" }}
                 >
                     <ToastContainer />
-                    <div className={bodyClasses} style={{ paddingLeft: QING.railWidth, boxSizing: "border-box" }}>
+                    <div
+                        className={`${bodyClasses} mx_QingShell_elementContent`}
+                        style={{ paddingLeft: QING.railWidth, boxSizing: "border-box" }}
+                    >
                         {content}
                     </div>
                     <QingShell />

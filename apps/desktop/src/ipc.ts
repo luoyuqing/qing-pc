@@ -5,7 +5,18 @@ SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Com
 Please see LICENSE files in the repository root for full details.
 */
 
-import { app, autoUpdater, BrowserWindow, desktopCapturer, ipcMain, net, powerSaveBlocker, TouchBar, nativeImage, session } from "electron";
+import {
+    app,
+    autoUpdater,
+    BrowserWindow,
+    desktopCapturer,
+    ipcMain,
+    net,
+    powerSaveBlocker,
+    TouchBar,
+    nativeImage,
+    session,
+} from "electron";
 
 import IpcMainEvent = Electron.IpcMainEvent;
 import { randomArray } from "./utils.js";
@@ -272,7 +283,7 @@ ipcMain.handle(
             throw new Error(`不支持的协议：${parsed.protocol}`);
         }
 
-        const timeoutMs = Math.min(Math.max(req.timeoutMs ?? 10000, 1000), 60000);
+        const timeoutMs = Math.min(Math.max(req.timeoutMs ?? 10000, 1000), 240000);
         const res = await net.fetch(req.url, {
             method: req.method ?? "GET",
             headers: req.headers,
@@ -336,10 +347,7 @@ ipcMain.handle("qingOpenService", async (_ev, rawUrl: string): Promise<boolean> 
     });
     // 等页面真正加载完再返回，前端据此收起「正在打开…」的等待态。
     // 加个上限，避免个别页面长连接一直不触发 did-finish-load 而卡住 UI。
-    await Promise.race([
-        win.loadURL(rawUrl),
-        new Promise<void>((resolve) => setTimeout(resolve, 8000)),
-    ]);
+    await Promise.race([win.loadURL(rawUrl), new Promise<void>((resolve) => setTimeout(resolve, 8000))]);
     return true;
 });
 
