@@ -65,22 +65,52 @@ textarea.input {
 }
 .row,
 .confirmation {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cpd-space-2x);
     padding: var(--cpd-space-4x);
-    border: 1px solid var(--cpd-color-border-interactive-secondary);
+    border: 1px solid var(--cpd-color-border-disabled);
     background: var(--cpd-color-bg-subtle-primary);
     border-radius: var(--cpd-space-3x);
+}
+.meta {
+    color: var(--cpd-color-text-secondary);
+    font: var(--cpd-font-body-xs-regular);
+}
+.actions {
+    margin-block-start: var(--cpd-space-1x);
+}
+.badge {
+    font: var(--cpd-font-body-xs-semibold);
+    padding: 2px 8px;
+    border-radius: 999px;
+}
+.badgeOk {
+    color: var(--cpd-color-text-success-primary);
+    background: var(--cpd-color-bg-subtle-secondary);
+}
+.badgeWarn {
+    color: var(--cpd-color-text-secondary);
+    background: var(--cpd-color-bg-subtle-secondary);
+}
+.badgeDanger {
+    color: var(--cpd-color-text-critical-primary);
+    background: var(--cpd-color-bg-subtle-secondary);
 }
 .resultBox {
     display: flex;
     flex-direction: column;
     gap: var(--cpd-space-2x);
-    padding: var(--cpd-space-3x);
+    margin-block-end: var(--cpd-space-3x);
+    padding: var(--cpd-space-3x) var(--cpd-space-4x);
     border: 1px solid var(--cpd-color-border-disabled);
     background: var(--cpd-color-bg-subtle-primary);
-    border-radius: var(--cpd-space-2x);
+    border-radius: var(--cpd-space-3x);
 }
 .result {
     margin: 0;
+    flex: 1;
+    min-width: 0;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     font: var(--cpd-font-body-sm-regular);

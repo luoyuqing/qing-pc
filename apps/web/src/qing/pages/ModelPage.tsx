@@ -26,6 +26,13 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState<string | null>(null);
     const [testMsg, setTestMsg] = useState<string | null>(null);
+    const [switchNotice, setSwitchNotice] = useState<string | null>(null);
+    const [selectedKey, setSelectedKey] = useState<string | null>(null);
+    const [editingKey, setEditingKey] = useState<string | null>(null);
+    const [editLabelVal, setEditLabelVal] = useState("");
+    const [editModelVal, setEditModelVal] = useState("");
+    const [editBaseVal, setEditBaseVal] = useState("");
+    const [editKeyEnvVal, setEditKeyEnvVal] = useState("");
     const [adding, setAdding] = useState(false);
     const [nk, setNk] = useState("");
     const [nl, setNl] = useState("");
@@ -139,15 +146,53 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
         setBusy(null);
     };
 
-    const swap = async (key: string): Promise<void> => {
+    const swap = async (key: string, label?: string): Promise<void> => {
         setBusy(key);
         setError(null);
+        setSwitchNotice(null);
         try {
             await hub.switchModel(key, persona);
             await new Promise((r) => setTimeout(r, 600));
             setTick((t) => t + 1);
+            setSwitchNotice(_t("qing|model_switched", { v0: label || key }));
         } catch (e) {
             setError((e as Error).message);
+        }
+        setBusy(null);
+    };
+
+    const startEditCandidate = (c: any): void => {
+        setEditingKey(c.key);
+        setEditLabelVal(c.label || "");
+        setEditModelVal(c.model || "");
+        setEditBaseVal(c.base_url || "");
+        setEditKeyEnvVal(c.key_env || "");
+    };
+
+    const saveEditCandidate = async (c: any): Promise<void> => {
+        if (!editModelVal.trim() || !editBaseVal.trim()) {
+            setError(_t("qing|text_7f192585"));
+            return;
+        }
+        setBusy(`edit:${c.key}`);
+        setError(null);
+        try {
+            await hub.updateCandidate(
+                c.key,
+                persona,
+                {
+                    label: editLabelVal.trim() || c.key,
+                    model: editModelVal.trim(),
+                    base_url: editBaseVal.trim(),
+                    key_env: editKeyEnvVal.trim() || undefined,
+                    api_mode: c.api_mode || "chat_completions",
+                },
+                "persona",
+            );
+            setEditingKey(null);
+            await load();
+        } catch (e) {
+            setError(_t("qing|text_2ecda40c", { v0: (e as Error).message }));
         }
         setBusy(null);
     };
@@ -184,6 +229,26 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
 
     const cur = data?.model || {};
     const candidates: any[] = Array.isArray(data?.candidates) ? data.candidates : [];
+    const auxiliaryList: any[] = Array.isArray(data?.auxiliary)
+        ? data.auxiliary
+        : data?.auxiliary && typeof data.auxiliary === "object"
+          ? Object.entries(data.auxiliary).map(([k, v]: [string, any]) => ({
+                key: k,
+                ...(typeof v === "object" && v !== null ? v : {}),
+            }))
+          : [];
+
+    const inputStyle: React.CSSProperties = {
+        width: "100%",
+        boxSizing: "border-box",
+        padding: "6px 9px",
+        fontSize: 12.5,
+        borderRadius: 7,
+        border: `1px solid ${p.divider}`,
+        background: p.bg,
+        color: p.text,
+        outline: "none",
+    };
 
     return (
         <>
@@ -205,31 +270,62 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
                         <ErrorBox message={error} />
                     </div>
                 )}
+                {switchNotice && (
+                    <div
+                        role="status"
+                        style={{
+                            marginBottom: 12,
+                            padding: "10px 14px",
+                            borderRadius: 10,
+                            background: p.accentSoft,
+                            color: p.accent,
+                            fontSize: 13,
+                            fontWeight: 500,
+                        }}
+                    >
+                        {switchNotice}
+                    </div>
+                )}
 
-                <Card style={{ marginBottom: 14, background: p.accentSoft, borderColor: "transparent" }}>
-                    <div style={{ fontSize: 11.5, color: p.textDim }}>{_t("qing|text_52f79fed")}</div>
-                    <div style={{ fontSize: 15.5, fontWeight: 600, color: p.text, marginTop: 2 }}>
+                <Card style={{ marginBottom: 16, background: p.accentSoft, borderColor: "transparent" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 11.5, color: p.accent, fontWeight: 600 }}>
+                            {_t("qing|text_52f79fed")}
+                        </span>
+                        <span
+                            style={{
+                                marginLeft: "auto",
+                                fontSize: 11,
+                                color: cur.has_key ? p.accent : p.danger,
+                                padding: "2px 8px",
+                                borderRadius: 999,
+                                background: p.bg,
+                            }}
+                        >
+                            {cur.has_key ? _t("qing|text_7e358a91") : _t("qing|text_3bb6c086")}
+                        </span>
+                    </div>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: p.text, marginTop: 4 }}>
                         {cur.label || cur.model || _t("qing|text_80a57e03")}
                     </div>
                     <div style={{ fontSize: 12, color: p.textDim, marginTop: 4, wordBreak: "break-all" }}>
                         {[cur.model, cur.base_url].filter(Boolean).join(" · ")}
                     </div>
-                    <div style={{ marginTop: 8 }}>
-                        <Button disabled={busy === "label"} onClick={() => void editLabel()}>
-                            {busy === "label" ? "…" : _t("qing|text_12a0d18f")}
-                        </Button>
-                    </div>
-                    <div style={{ display: "flex", gap: 12, marginTop: 6, fontSize: 11.5, color: p.textDim }}>
-                        {cur.api_mode ? <span>{statusLabel(cur.api_mode)}</span> : null}
-                        {cur.key_env ? <span>{cur.key_env}</span> : null}
-                        <span style={{ color: cur.has_key ? p.accent : p.danger }}>
-                            {cur.has_key ? _t("qing|text_7e358a91") : _t("qing|text_3bb6c086")}
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 10, flexWrap: "wrap" }}>
+                        {cur.api_mode ? (
+                            <span style={{ fontSize: 11.5, color: p.textDim }}>{statusLabel(cur.api_mode)}</span>
+                        ) : null}
+                        {cur.key_env ? <span style={{ fontSize: 11.5, color: p.textDim }}>{cur.key_env}</span> : null}
+                        <span style={{ marginLeft: "auto" }}>
+                            <Button disabled={busy === "label"} onClick={() => void editLabel()}>
+                                {busy === "label" ? "…" : _t("qing|text_12a0d18f")}
+                            </Button>
                         </span>
                     </div>
                 </Card>
 
                 <>
-                    <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
                         <span style={{ fontSize: 13, fontWeight: 600, color: p.text }}>
                             {_t("qing|text_eea80913")}
                             {candidates.length}）
@@ -242,17 +338,22 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
                     </div>
                     {testMsg && (
                         <div
+                            role="status"
                             style={{
-                                fontSize: 12,
+                                fontSize: 12.5,
                                 color: testMsg.startsWith(_t("qing|text_016bf26f")) ? p.accent : p.danger,
-                                marginBottom: 8,
+                                marginBottom: 10,
+                                padding: "8px 12px",
+                                borderRadius: 8,
+                                background: p.bgAlt,
+                                border: `1px solid ${p.divider}`,
                             }}
                         >
                             {testMsg}
                         </div>
                     )}
                     {adding && (
-                        <Card style={{ marginBottom: 10 }}>
+                        <Card style={{ marginBottom: 12, borderColor: p.divider }}>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                                 {[
                                     [_t("qing|text_66e7500a"), nk, setNk, "dso"],
@@ -267,17 +368,7 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
                                             value={val}
                                             onChange={(e) => set(e.target.value)}
                                             placeholder={ph}
-                                            style={{
-                                                width: "100%",
-                                                boxSizing: "border-box",
-                                                padding: "6px 9px",
-                                                fontSize: 12.5,
-                                                borderRadius: 7,
-                                                border: `1px solid ${p.border}`,
-                                                background: p.bg,
-                                                color: p.text,
-                                                outline: "none",
-                                            }}
+                                            style={inputStyle}
                                         />
                                     </div>
                                 ))}
@@ -291,17 +382,7 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
                                     value={ne}
                                     onChange={(e) => setNe(e.target.value)}
                                     placeholder="DEEPSEEK_API_KEY"
-                                    style={{
-                                        width: "100%",
-                                        boxSizing: "border-box",
-                                        padding: "6px 9px",
-                                        fontSize: 12.5,
-                                        borderRadius: 7,
-                                        border: `1px solid ${p.border}`,
-                                        background: p.bg,
-                                        color: p.text,
-                                        outline: "none",
-                                    }}
+                                    style={inputStyle}
                                 />
                             </div>
                             <div style={{ marginTop: 10 }}>
@@ -313,20 +394,40 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
                     )}
                     {candidates.map((c) => {
                         const active = c.is_current || c.key === cur.key;
+                        const selected = selectedKey === c.key;
+                        const editing = editingKey === c.key;
                         return (
                             <Card
                                 key={c.key}
-                                onClick={active || busy ? undefined : () => void swap(c.key)}
+                                onClick={() => setSelectedKey((prev) => (prev === c.key ? null : c.key))}
                                 style={{
                                     marginBottom: 8,
-                                    opacity: busy && busy !== c.key ? 0.55 : 1,
-                                    borderColor: active ? p.accent : p.border,
+                                    opacity: busy && busy !== c.key ? 0.6 : 1,
+                                    borderColor: active ? p.accent : selected ? p.border : p.divider,
                                 }}
                             >
-                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                     <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ fontSize: 13.5, fontWeight: 600, color: p.text }}>
-                                            {c.label || c.model || c.key}
+                                        <div
+                                            style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
+                                        >
+                                            <span style={{ fontSize: 13.5, fontWeight: 600, color: p.text }}>
+                                                {c.label || c.model || c.key}
+                                            </span>
+                                            {active && (
+                                                <span
+                                                    style={{
+                                                        fontSize: 11,
+                                                        fontWeight: 600,
+                                                        color: p.accent,
+                                                        background: p.accentSoft,
+                                                        padding: "2px 8px",
+                                                        borderRadius: 999,
+                                                    }}
+                                                >
+                                                    {_t("qing|text_fa48e893")}
+                                                </span>
+                                            )}
                                         </div>
                                         <div
                                             style={{
@@ -339,28 +440,28 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
                                             {[c.model, c.base_url].filter(Boolean).join(" · ")}
                                         </div>
                                     </div>
-                                    {active ? (
-                                        <span style={{ fontSize: 11.5, color: p.accent, flexShrink: 0 }}>
-                                            {_t("qing|text_fa48e893")}
-                                        </span>
-                                    ) : busy === c.key ? (
-                                        <span style={{ fontSize: 11.5, color: p.textDim, flexShrink: 0 }}>
-                                            {_t("qing|text_ad0196c8")}
-                                        </span>
-                                    ) : (
-                                        <span style={{ fontSize: 11.5, color: p.textDim, flexShrink: 0 }}>
-                                            {_t("qing|text_eff514b8")}
-                                        </span>
+                                    {!active && (
+                                        <Button
+                                            variant="primary"
+                                            disabled={Boolean(busy)}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                void swap(c.key, c.label || c.model);
+                                            }}
+                                        >
+                                            {busy === c.key ? _t("qing|text_ad0196c8") : _t("qing|model_switch_btn")}
+                                        </Button>
                                     )}
                                 </div>
                                 <div
                                     style={{
                                         display: "flex",
                                         gap: 10,
-                                        marginTop: 6,
+                                        marginTop: 8,
                                         fontSize: 11,
                                         color: p.textDim,
                                         alignItems: "center",
+                                        flexWrap: "wrap",
                                     }}
                                 >
                                     {c.key_env ? <span>{c.key_env}</span> : null}
@@ -373,15 +474,34 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
                                             type="button"
                                             onClick={(e) => {
                                                 e.stopPropagation();
+                                                if (editing) setEditingKey(null);
+                                                else startEditCandidate(c);
+                                            }}
+                                            style={{
+                                                fontSize: 11,
+                                                padding: "3px 9px",
+                                                borderRadius: 6,
+                                                cursor: "pointer",
+                                                border: `1px solid ${p.divider}`,
+                                                background: "transparent",
+                                                color: p.text,
+                                            }}
+                                        >
+                                            {editing ? _t("qing|text_2cd0f3be") : _t("qing|text_05183656")}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
                                                 void testOne(c.key);
                                             }}
                                             disabled={busy === `test:${c.key}`}
                                             style={{
                                                 fontSize: 11,
-                                                padding: "2px 8px",
+                                                padding: "3px 9px",
                                                 borderRadius: 6,
                                                 cursor: "pointer",
-                                                border: `1px solid ${p.border}`,
+                                                border: `1px solid ${p.divider}`,
                                                 background: "transparent",
                                                 color: p.textDim,
                                             }}
@@ -399,10 +519,10 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
                                             disabled={busy === `del:${c.key}`}
                                             style={{
                                                 fontSize: 11,
-                                                padding: "2px 8px",
+                                                padding: "3px 9px",
                                                 borderRadius: 6,
                                                 cursor: "pointer",
-                                                border: `1px solid ${p.border}`,
+                                                border: `1px solid ${p.divider}`,
                                                 background: "transparent",
                                                 color: p.danger,
                                             }}
@@ -411,24 +531,186 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
                                         </button>
                                     </span>
                                 </div>
+                                {selected && !editing && (
+                                    <div
+                                        style={{
+                                            marginTop: 10,
+                                            paddingTop: 10,
+                                            borderTop: `1px solid ${p.divider}`,
+                                            fontSize: 11.5,
+                                            color: p.textDim,
+                                            display: "grid",
+                                            gridTemplateColumns: "auto 1fr",
+                                            gap: "4px 12px",
+                                        }}
+                                    >
+                                        <span>{_t("qing|text_66e7500a")}</span>
+                                        <span style={{ color: p.text, fontFamily: "ui-monospace, monospace" }}>
+                                            {c.key}
+                                        </span>
+                                        {c.api_mode && (
+                                            <>
+                                                <span>{_t("qing|text_a9fd1ddb")}</span>
+                                                <span style={{ color: p.text }}>{statusLabel(c.api_mode)}</span>
+                                            </>
+                                        )}
+                                        {c.base_url && (
+                                            <>
+                                                <span>{_t("qing|text_52fff168")}</span>
+                                                <span style={{ color: p.text, wordBreak: "break-all" }}>
+                                                    {c.base_url}
+                                                </span>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+                                {editing && (
+                                    <div
+                                        onClick={(e) => e.stopPropagation()}
+                                        onKeyDown={(e) => e.stopPropagation()}
+                                        role="presentation"
+                                        style={{
+                                            marginTop: 10,
+                                            paddingTop: 10,
+                                            borderTop: `1px solid ${p.divider}`,
+                                            display: "grid",
+                                            gap: 8,
+                                        }}
+                                    >
+                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                                            <div>
+                                                <div style={{ fontSize: 11, color: p.textDim, marginBottom: 3 }}>
+                                                    {_t("qing|text_daede988")}
+                                                </div>
+                                                <input
+                                                    aria-label={_t("qing|text_daede988")}
+                                                    value={editLabelVal}
+                                                    onChange={(e) => setEditLabelVal(e.target.value)}
+                                                    style={inputStyle}
+                                                />
+                                            </div>
+                                            <div>
+                                                <div style={{ fontSize: 11, color: p.textDim, marginBottom: 3 }}>
+                                                    {_t("qing|text_c98e118e")}
+                                                </div>
+                                                <input
+                                                    aria-label={_t("qing|text_c98e118e")}
+                                                    value={editModelVal}
+                                                    onChange={(e) => setEditModelVal(e.target.value)}
+                                                    style={inputStyle}
+                                                />
+                                            </div>
+                                            <div>
+                                                <div style={{ fontSize: 11, color: p.textDim, marginBottom: 3 }}>
+                                                    {_t("qing|text_52fff168")}
+                                                </div>
+                                                <input
+                                                    aria-label={_t("qing|text_52fff168")}
+                                                    value={editBaseVal}
+                                                    onChange={(e) => setEditBaseVal(e.target.value)}
+                                                    style={inputStyle}
+                                                />
+                                            </div>
+                                            <div>
+                                                <div style={{ fontSize: 11, color: p.textDim, marginBottom: 3 }}>
+                                                    {_t("qing|text_3b3585b2")}
+                                                </div>
+                                                <input
+                                                    aria-label={_t("qing|text_3b3585b2")}
+                                                    value={editKeyEnvVal}
+                                                    onChange={(e) => setEditKeyEnvVal(e.target.value)}
+                                                    style={inputStyle}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div style={{ display: "flex", gap: 8 }}>
+                                            <Button
+                                                variant="primary"
+                                                disabled={busy === `edit:${c.key}`}
+                                                onClick={() => void saveEditCandidate(c)}
+                                            >
+                                                {busy === `edit:${c.key}`
+                                                    ? _t("qing|text_ff509c9b")
+                                                    : _t("qing|text_a3030bf8")}
+                                            </Button>
+                                            <Button onClick={() => setEditingKey(null)}>
+                                                {_t("qing|text_2cd0f3be")}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
                             </Card>
                         );
                     })}
                 </>
 
+                {auxiliaryList.length > 0 && (
+                    <>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: p.text, margin: "18px 0 8px" }}>
+                            {_t("qing|model_auxiliary_title")}
+                        </div>
+                        <div
+                            style={{
+                                borderRadius: 12,
+                                background: p.bgAlt,
+                                border: `1px solid ${p.divider}`,
+                                overflow: "hidden",
+                            }}
+                        >
+                            {auxiliaryList.map((aux, i) => (
+                                <div
+                                    key={aux.key || aux.model || i}
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 10,
+                                        padding: "11px 14px",
+                                        borderTop: i === 0 ? "none" : `1px solid ${p.divider}`,
+                                    }}
+                                >
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontSize: 13, fontWeight: 600, color: p.text }}>
+                                            {aux.label || aux.key || aux.model}
+                                        </div>
+                                        <div style={{ fontSize: 11.5, color: p.textDim, marginTop: 2 }}>
+                                            {[aux.model, aux.base_url].filter(Boolean).join(" · ") || "—"}
+                                        </div>
+                                    </div>
+                                    <Button onClick={() => setConfigure(true)}>{_t("qing|text_05183656")}</Button>
+                                </div>
+                            ))}
+                        </div>
+                    </>
+                )}
+
                 {Array.isArray(data?.fallback) && data.fallback.length > 0 && (
                     <>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: p.text, margin: "16px 0 8px" }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: p.text, margin: "18px 0 8px" }}>
                             {_t("qing|text_f40bbf98")}
                         </div>
-                        {data.fallback.map((f: any, i: number) => (
-                            <div
-                                key={typeof f === "string" ? f : f.key || f.model}
-                                style={{ fontSize: 12.5, color: p.textDim, padding: "4px 0" }}
-                            >
-                                {i + 1}. {typeof f === "string" ? f : f.label || f.model || f.key || JSON.stringify(f)}
-                            </div>
-                        ))}
+                        <div
+                            style={{
+                                borderRadius: 12,
+                                background: p.bgAlt,
+                                border: `1px solid ${p.divider}`,
+                                overflow: "hidden",
+                            }}
+                        >
+                            {data.fallback.map((f: any, i: number) => (
+                                <div
+                                    key={typeof f === "string" ? f : f.key || f.model || i}
+                                    style={{
+                                        fontSize: 12.5,
+                                        color: p.text,
+                                        padding: "10px 14px",
+                                        borderTop: i === 0 ? "none" : `1px solid ${p.divider}`,
+                                    }}
+                                >
+                                    <span style={{ color: p.textDim, marginRight: 8 }}>{i + 1}.</span>
+                                    {typeof f === "string" ? f : f.label || f.model || f.key || JSON.stringify(f)}
+                                </div>
+                            ))}
+                        </div>
                     </>
                 )}
             </Scroll>

@@ -256,7 +256,8 @@ export const hub = {
     // ---- 凭据 / 插件 ----
     agentCredentials: (withRefs = false): Promise<any> =>
         request(`/agent/credentials${withRefs ? "?with_refs=1" : ""}`),
-    agentPlugins: (): Promise<any> => request("/agent/plugins"),
+    agentPlugins: (persona?: string): Promise<any> =>
+        request(`/agent/plugins${persona ? `?persona=${encodeURIComponent(persona)}` : ""}`),
 
     // ---- 记忆 ----
     memory: (persona?: string): Promise<any> =>

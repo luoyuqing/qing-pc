@@ -24,6 +24,7 @@ import { UsagePage } from "./UsagePage";
 import { ServicesPage } from "./ServicesPage";
 import { SettingsPage } from "./SettingsPage";
 import { CredentialsPage } from "./CredentialsPage";
+import { PluginsPage } from "./PluginsPage";
 import { DeviceDataPage } from "./DeviceDataPage";
 import { PrivacyPage } from "./PrivacyPage";
 import { ServerPage } from "./ServerPage";
@@ -471,7 +472,54 @@ describe("Qing page workflows", () => {
         expect(hub.switchModel).not.toHaveBeenCalled();
         await screen.findByText(/测试通过/);
         fireEvent.click(screen.getByText("候选模型", { exact: true }));
+        expect(hub.switchModel).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "切换" }));
         await waitFor(() => expect(hub.switchModel).toHaveBeenCalledWith("other", "default"));
+        await screen.findByText("已切换到 候选模型");
+    });
+
+    it("edits credentials and isolates plugin toggles per profile", async () => {
+        vi.mocked(hub.agentCredentials).mockResolvedValue({
+            items: [{ name: "OLD_KEY", resolved: true, references: [] }],
+        });
+        render(<CredentialsPage />);
+        fireEvent.click(await screen.findByRole("button", { name: "编辑" }));
+        fireEvent.change(screen.getByLabelText("变量名"), { target: { value: "RENAMED_KEY" } });
+        const valInput = screen.getByLabelText("新值");
+        expect(valInput).toHaveAttribute("type", "password");
+        fireEvent.change(valInput, { target: { value: "new-secret" } });
+        fireEvent.click(screen.getByRole("button", { name: "保存" }));
+        await waitFor(() => expect(hub.setCredential).toHaveBeenCalledWith("RENAMED_KEY", "new-secret"));
+        await waitFor(() => expect(hub.deleteCredential).toHaveBeenCalledWith("OLD_KEY", false));
+
+        cleanup();
+        vi.mocked(hub.agentPlugins).mockResolvedValue({
+            items: [{ id: "mem", name: "记忆插件", kind: "installed", enabled: true }],
+        });
+        render(<PluginsPage />);
+        const sw = await screen.findByRole("switch", { name: "记忆插件" });
+        expect(sw).toHaveAttribute("aria-checked", "true");
+        fireEvent.click(sw);
+        expect(sw).toHaveAttribute("aria-checked", "false");
+        fireEvent.change(screen.getByRole("combobox"), { target: { value: "other" } });
+        await waitFor(() => expect(hub.agentPlugins).toHaveBeenCalledWith("other"));
+        expect(await screen.findByRole("switch", { name: "记忆插件" })).toHaveAttribute("aria-checked", "true");
+    });
+
+    it("disables boundary arrows and supports moving services down", async () => {
+        vi.mocked(hub.serviceCatalog).mockResolvedValue({
+            services: [
+                { id: "a", name: "面板A", hostname: "a.3585616.xyz" },
+                { id: "b", name: "面板B", hostname: "b.3585616.xyz" },
+            ],
+        });
+        render(<ServicesPage />);
+        const ups = await screen.findAllByRole("button", { name: "上移" });
+        const downs = screen.getAllByRole("button", { name: "下移" });
+        expect(ups[0]).toBeDisabled();
+        expect(downs[1]).toBeDisabled();
+        fireEvent.click(downs[0]);
+        await waitFor(() => expect(hub.serviceOrder).toHaveBeenCalledWith(["b", "a"]));
     });
 
     it("updates and deletes credentials only after explicit user actions", async () => {

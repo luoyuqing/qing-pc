@@ -193,7 +193,7 @@ export const ServicesPage: React.FC<{ onBack?: () => void }> = ({ onBack }): Rea
                         <div
                             style={{
                                 display: "grid",
-                                gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))",
+                                gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
                                 gap: 10,
                                 marginBottom: 24,
                             }}
@@ -208,12 +208,13 @@ export const ServicesPage: React.FC<{ onBack?: () => void }> = ({ onBack }): Rea
                                         gap: 12,
                                         alignItems: "center",
                                         padding: "13px 14px",
+                                        borderColor: p.divider,
                                     }}
                                 >
                                     <div
                                         style={{
-                                            width: 38,
-                                            height: 38,
+                                            width: 40,
+                                            height: 40,
                                             borderRadius: 12,
                                             background: p.accentSoft,
                                             display: "flex",
@@ -238,14 +239,6 @@ export const ServicesPage: React.FC<{ onBack?: () => void }> = ({ onBack }): Rea
                                         >
                                             {item.name || item.id}
                                         </div>
-                                        <Button
-                                            onClick={(event) => {
-                                                event.stopPropagation();
-                                                void moveService(String(item.id), -1);
-                                            }}
-                                        >
-                                            {_t("qing|text_f853a70b")}
-                                        </Button>
                                         {item.desc && (
                                             <div
                                                 style={{
@@ -260,6 +253,65 @@ export const ServicesPage: React.FC<{ onBack?: () => void }> = ({ onBack }): Rea
                                                 {item.desc}
                                             </div>
                                         )}
+                                    </div>
+                                    <div
+                                        style={{
+                                            display: "flex",
+                                            flexDirection: "column",
+                                            gap: 2,
+                                            flexShrink: 0,
+                                        }}
+                                    >
+                                        <button
+                                            type="button"
+                                            aria-label={_t("qing|text_f853a70b")}
+                                            title={_t("qing|text_f853a70b")}
+                                            disabled={index === 0}
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                void moveService(String(item.id), -1);
+                                            }}
+                                            style={{
+                                                width: 22,
+                                                height: 18,
+                                                padding: 0,
+                                                border: "none",
+                                                borderRadius: 4,
+                                                background: "transparent",
+                                                color: p.textDim,
+                                                fontSize: 11,
+                                                lineHeight: "18px",
+                                                cursor: index === 0 ? "default" : "pointer",
+                                                opacity: index === 0 ? 0.25 : 0.8,
+                                            }}
+                                        >
+                                            ↑
+                                        </button>
+                                        <button
+                                            type="button"
+                                            aria-label={_t("qing|text_e75e8b4e")}
+                                            title={_t("qing|text_e75e8b4e")}
+                                            disabled={index === local.length - 1}
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                void moveService(String(item.id), 1);
+                                            }}
+                                            style={{
+                                                width: 22,
+                                                height: 18,
+                                                padding: 0,
+                                                border: "none",
+                                                borderRadius: 4,
+                                                background: "transparent",
+                                                color: p.textDim,
+                                                fontSize: 11,
+                                                lineHeight: "18px",
+                                                cursor: index === local.length - 1 ? "default" : "pointer",
+                                                opacity: index === local.length - 1 ? 0.25 : 0.8,
+                                            }}
+                                        >
+                                            ↓
+                                        </button>
                                     </div>
                                 </Card>
                             ))}
@@ -288,20 +340,41 @@ export const ServicesPage: React.FC<{ onBack?: () => void }> = ({ onBack }): Rea
 
                     {favs.length > 0 && (
                         <>
-                            <div style={{ fontSize: 12, color: p.textDim, margin: "20px 0 10px" }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: p.textDim, margin: "20px 0 8px" }}>
                                 {_t("qing|text_8fbdb033")}
                             </div>
-                            {favs.map((fav, i) => (
-                                <Card
-                                    key={fav.id ?? i}
-                                    onClick={() => fav.url && openExternal(`${fav.url}`)}
-                                    style={{ marginBottom: 6, padding: "10px 14px" }}
-                                >
-                                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                        <span style={{ fontSize: 13.5, color: p.text }}>{fav.name || fav.url}</span>
+                            <div
+                                style={{
+                                    borderRadius: 12,
+                                    background: p.bgAlt,
+                                    border: `1px solid ${p.divider}`,
+                                    overflow: "hidden",
+                                }}
+                            >
+                                {favs.map((fav, i) => (
+                                    <button
+                                        key={fav.id ?? i}
+                                        type="button"
+                                        onClick={() => fav.url && openExternal(`${fav.url}`)}
+                                        style={{
+                                            width: "100%",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: 10,
+                                            padding: "11px 14px",
+                                            border: "none",
+                                            borderTop: i === 0 ? "none" : `1px solid ${p.divider}`,
+                                            background: "transparent",
+                                            cursor: "pointer",
+                                            textAlign: "left",
+                                        }}
+                                    >
+                                        <span style={{ fontSize: 13.5, fontWeight: 500, color: p.text }}>
+                                            {fav.name || fav.url}
+                                        </span>
                                         <span
                                             style={{
-                                                fontSize: 11,
+                                                fontSize: 11.5,
                                                 color: p.textDim,
                                                 marginLeft: "auto",
                                                 overflow: "hidden",
@@ -312,9 +385,10 @@ export const ServicesPage: React.FC<{ onBack?: () => void }> = ({ onBack }): Rea
                                         >
                                             {fav.url}
                                         </span>
-                                    </div>
-                                </Card>
-                            ))}
+                                        <span style={{ fontSize: 12, color: p.textDim }}>↗</span>
+                                    </button>
+                                ))}
+                            </div>
                         </>
                     )}
                 </Scroll>

@@ -24,6 +24,8 @@ export interface QingCollectionRow {
     id: string;
     title: string;
     description: string;
+    meta?: string;
+    badge?: { label: string; tone?: "ok" | "warn" | "danger" };
     actions: QingCollectionAction[];
 }
 
@@ -53,6 +55,8 @@ export interface QingCollectionViewSnapshot {
     editing: boolean;
     confirmation: string;
     result: string;
+    /** Raw payload for copy-to-clipboard when result is a human summary. */
+    rawResult?: string;
     /** Documentation URLs already validated by the view model. */
     links?: { url: string; label: string }[];
     labels: {
@@ -65,6 +69,7 @@ export interface QingCollectionViewSnapshot {
         loading: string;
         empty: string;
         copy?: string;
+        copyRaw?: string;
         copied?: string;
     };
 }
@@ -96,8 +101,9 @@ export function QingCollectionView({ vm }: Readonly<Props>): JSX.Element {
     const { title, hint, labels, loading, busy, error, notice, query, rows, fields, toolbar, editing } = snapshot;
 
     const copyResult = (): void => {
-        if (!snapshot.result || !navigator.clipboard?.writeText) return;
-        void navigator.clipboard.writeText(snapshot.result).then(() => {
+        const text = snapshot.rawResult ?? snapshot.result;
+        if (!text || !navigator.clipboard?.writeText) return;
+        void navigator.clipboard.writeText(text).then(() => {
             setCopied(true);
             setTimeout(() => setCopied(false), 1800);
         });
@@ -231,35 +237,57 @@ export function QingCollectionView({ vm }: Readonly<Props>): JSX.Element {
                         )}
                         {snapshot.result && (
                             <div className={styles.resultBox}>
-                                <Flex justify="end">
+                                <Flex justify="space-between" align="center" gap="var(--cpd-space-2x)">
+                                    <pre className={styles.result}>{snapshot.result}</pre>
                                     <Button kind="secondary" size="md" onClick={copyResult}>
-                                        {copied ? (labels.copied ?? "Copied") : (labels.copy ?? "Copy")}
+                                        {copied
+                                            ? (labels.copied ?? "Copied")
+                                            : snapshot.rawResult
+                                              ? (labels.copyRaw ?? labels.copy ?? "Copy raw data")
+                                              : (labels.copy ?? "Copy")}
                                     </Button>
                                 </Flex>
-                                <pre className={styles.result}>{snapshot.result}</pre>
                             </div>
                         )}
                         {!editing && rows.length === 0 && !snapshot.result && <Text>{labels.empty}</Text>}
                         <Flex direction="column" gap="var(--cpd-space-3x)">
                             {rows.map((row) => (
                                 <article key={row.id} className={styles.row}>
-                                    <Heading as="h2" size="sm">
-                                        {row.title}
-                                    </Heading>
-                                    <Text className={styles.hint}>{row.description}</Text>
-                                    <Flex gap="var(--cpd-space-2x)" wrap="wrap">
-                                        {row.actions.map((action) => (
-                                            <Button
-                                                key={action.id}
-                                                kind="secondary"
-                                                destructive={action.danger}
-                                                disabled={busy}
-                                                onClick={() => vm.activate(row.id, action.id)}
+                                    <Flex align="center" justify="space-between" gap="var(--cpd-space-2x)" wrap="wrap">
+                                        <Heading as="h2" size="sm">
+                                            {row.title}
+                                        </Heading>
+                                        {row.badge && (
+                                            <span
+                                                className={`${styles.badge} ${
+                                                    row.badge.tone === "ok"
+                                                        ? styles.badgeOk
+                                                        : row.badge.tone === "danger"
+                                                          ? styles.badgeDanger
+                                                          : styles.badgeWarn
+                                                }`}
                                             >
-                                                {action.label}
-                                            </Button>
-                                        ))}
+                                                {row.badge.label}
+                                            </span>
+                                        )}
                                     </Flex>
+                                    {row.description && <Text className={styles.hint}>{row.description}</Text>}
+                                    {row.meta && <Text className={styles.meta}>{row.meta}</Text>}
+                                    {row.actions.length > 0 && (
+                                        <Flex gap="var(--cpd-space-2x)" wrap="wrap" className={styles.actions}>
+                                            {row.actions.map((action) => (
+                                                <Button
+                                                    key={action.id}
+                                                    kind="secondary"
+                                                    destructive={action.danger}
+                                                    disabled={busy}
+                                                    onClick={() => vm.activate(row.id, action.id)}
+                                                >
+                                                    {action.label}
+                                                </Button>
+                                            ))}
+                                        </Flex>
+                                    )}
                                 </article>
                             ))}
                         </Flex>

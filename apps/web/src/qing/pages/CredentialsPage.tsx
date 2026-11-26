@@ -27,6 +27,10 @@ export const CredentialsPage: React.FC<{ onBack?: () => void }> = ({ onBack }): 
     const [adding, setAdding] = useState(false);
     const [name, setName] = useState("");
     const [value, setValue] = useState("");
+    const [editingItem, setEditingItem] = useState<any | null>(null);
+    const [editName, setEditName] = useState("");
+    const [editValue, setEditValue] = useState("");
+    const [notice, setNotice] = useState<string | null>(null);
     const [busy, setBusy] = useState<string | null>(null);
     const p = palette();
 
@@ -51,11 +55,51 @@ export const CredentialsPage: React.FC<{ onBack?: () => void }> = ({ onBack }): 
             return;
         }
         setBusy("__add__");
+        setError(null);
+        setNotice(null);
         try {
             await hub.setCredential(name.trim(), value.trim());
             setName("");
             setValue("");
             setAdding(false);
+            setNotice(_t("qing|text_1bd91a7d"));
+            await load();
+        } catch (e) {
+            setError(_t("qing|text_2e9c15dc", { v0: (e as Error).message }));
+        }
+        setBusy(null);
+    };
+
+    const startEdit = (item: any): void => {
+        setAdding(false);
+        setEditingItem(item);
+        setEditName(item.name || "");
+        setEditValue("");
+        setError(null);
+        setNotice(null);
+    };
+
+    const saveEdit = async (): Promise<void> => {
+        if (!editingItem) return;
+        const nextName = editName.trim();
+        const nextValue = editValue.trim();
+        if (!nextName || !nextValue) {
+            setError(_t("qing|text_2a076c67"));
+            return;
+        }
+        setBusy(`edit:${editingItem.name}`);
+        setError(null);
+        setNotice(null);
+        try {
+            await hub.setCredential(nextName, nextValue);
+            if (nextName !== editingItem.name) {
+                const hasRefs = Array.isArray(editingItem.references) && editingItem.references.length > 0;
+                await hub.deleteCredential(editingItem.name, hasRefs);
+            }
+            setEditingItem(null);
+            setEditName("");
+            setEditValue("");
+            setNotice(_t("qing|text_1bd91a7d"));
             await load();
         } catch (e) {
             setError(_t("qing|text_2e9c15dc", { v0: (e as Error).message }));
@@ -114,7 +158,12 @@ export const CredentialsPage: React.FC<{ onBack?: () => void }> = ({ onBack }): 
                 onBack={onBack}
                 right={
                     <>
-                        <Button onClick={() => setAdding((v) => !v)}>
+                        <Button
+                            onClick={() => {
+                                setEditingItem(null);
+                                setAdding((v) => !v);
+                            }}
+                        >
                             {adding ? _t("qing|text_2cd0f3be") : _t("qing|text_0006d696")}
                         </Button>
                         <Button onClick={() => void load()}>{_t("qing|text_aee88743")}</Button>
@@ -122,13 +171,56 @@ export const CredentialsPage: React.FC<{ onBack?: () => void }> = ({ onBack }): 
                 }
             />
 
+            {notice && (
+                <div style={{ padding: "0 24px 10px" }}>
+                    <div
+                        role="status"
+                        style={{
+                            padding: "8px 12px",
+                            borderRadius: 8,
+                            background: p.accentSoft,
+                            color: p.accent,
+                            fontSize: 12.5,
+                        }}
+                    >
+                        {notice}
+                    </div>
+                </div>
+            )}
+
             {adding && (
                 <div style={{ padding: "0 24px 14px", flexShrink: 0, maxWidth: 560 }}>
-                    {field(_t("qing|text_9d9d7637"), name, setName, "DEEPSEEK_API_KEY")}
-                    {field(_t("qing|text_cda1d55c"), value, setValue, "sk-…", true)}
-                    <Button variant="primary" disabled={busy === "__add__"} onClick={() => void save()}>
-                        {busy === "__add__" ? _t("qing|text_a5969ce3") : _t("qing|text_3fe20a6a")}
-                    </Button>
+                    <Card style={{ borderColor: p.divider }}>
+                        {field(_t("qing|text_9d9d7637"), name, setName, "DEEPSEEK_API_KEY")}
+                        {field(_t("qing|text_cda1d55c"), value, setValue, "sk-…", true)}
+                        <Button variant="primary" disabled={busy === "__add__"} onClick={() => void save()}>
+                            {busy === "__add__" ? _t("qing|text_a5969ce3") : _t("qing|text_3fe20a6a")}
+                        </Button>
+                    </Card>
+                </div>
+            )}
+
+            {editingItem && (
+                <div style={{ padding: "0 24px 14px", flexShrink: 0, maxWidth: 560 }}>
+                    <Card style={{ borderColor: p.accent }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: p.text, marginBottom: 10 }}>
+                            {_t("qing|cred_edit_title", { v0: editingItem.name })}
+                        </div>
+                        {field(_t("qing|text_9d9d7637"), editName, setEditName, "DEEPSEEK_API_KEY")}
+                        {field(_t("qing|cred_new_value"), editValue, setEditValue, "sk-…", true)}
+                        <div style={{ display: "flex", gap: 8 }}>
+                            <Button
+                                variant="primary"
+                                disabled={busy === `edit:${editingItem.name}`}
+                                onClick={() => void saveEdit()}
+                            >
+                                {busy === `edit:${editingItem.name}`
+                                    ? _t("qing|text_a5969ce3")
+                                    : _t("qing|text_a3030bf8")}
+                            </Button>
+                            <Button onClick={() => setEditingItem(null)}>{_t("qing|text_2cd0f3be")}</Button>
+                        </div>
+                    </Card>
                 </div>
             )}
 
@@ -139,6 +231,18 @@ export const CredentialsPage: React.FC<{ onBack?: () => void }> = ({ onBack }): 
                     placeholder={_t("qing|text_de63bc02")}
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
+                    style={{
+                        width: "100%",
+                        maxWidth: 400,
+                        boxSizing: "border-box",
+                        padding: "8px 12px",
+                        fontSize: 13,
+                        borderRadius: 8,
+                        border: `1px solid ${p.divider}`,
+                        background: p.bgAlt,
+                        color: p.text,
+                        outline: "none",
+                    }}
                 />
             </div>
             {loading ? (
@@ -154,11 +258,15 @@ export const CredentialsPage: React.FC<{ onBack?: () => void }> = ({ onBack }): 
                     {items
                         .filter((item) => `${item.name}`.toLowerCase().includes(query.toLowerCase()))
                         .map((c, i) => (
-                            <Card key={c.name || i} style={{ marginBottom: 6, padding: "9px 14px" }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <Card
+                                key={c.name || i}
+                                style={{ marginBottom: 8, padding: "11px 14px", borderColor: p.divider }}
+                            >
+                                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                                     <span
                                         style={{
                                             fontSize: 13,
+                                            fontWeight: 500,
                                             color: p.text,
                                             fontFamily: "ui-monospace, monospace",
                                             flex: 1,
@@ -170,7 +278,14 @@ export const CredentialsPage: React.FC<{ onBack?: () => void }> = ({ onBack }): 
                                         {c.name}
                                     </span>
                                     <span
-                                        style={{ fontSize: 11, color: c.resolved ? p.accent : p.danger, flexShrink: 0 }}
+                                        style={{
+                                            fontSize: 11,
+                                            color: c.resolved ? p.accent : p.danger,
+                                            padding: "2px 8px",
+                                            borderRadius: 999,
+                                            background: p.bg,
+                                            flexShrink: 0,
+                                        }}
                                     >
                                         {c.resolved ? _t("qing|text_769054c1") : _t("qing|text_65364e6f")}
                                     </span>
@@ -184,6 +299,9 @@ export const CredentialsPage: React.FC<{ onBack?: () => void }> = ({ onBack }): 
                                             ? _t("qing|text_6d95c8bd", { v0: c.references.length })
                                             : ""}
                                     </span>
+                                    <Button disabled={Boolean(busy)} onClick={() => startEdit(c)}>
+                                        {_t("qing|text_05183656")}
+                                    </Button>
                                     <Button disabled={busy === c.name} onClick={() => void remove(c)}>
                                         {busy === c.name ? "…" : _t("qing|text_2f9daa82")}
                                     </Button>

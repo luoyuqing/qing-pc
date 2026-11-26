@@ -83,6 +83,7 @@ export class QingCollectionViewModel
             editing: false,
             confirmation: "",
             result: "",
+            rawResult: "",
             labels: {
                 back: _t("qing|text_572cf45b"),
                 refresh: _t("qing|text_aee88743"),
@@ -93,6 +94,7 @@ export class QingCollectionViewModel
                 loading: _t("qing|text_d3d21191"),
                 empty: _t("qing|text_70a40a53"),
                 copy: _t("qing|copy"),
+                copyRaw: _t("qing|copy_raw"),
                 copied: _t("qing|copied"),
             },
         });
@@ -219,11 +221,30 @@ export class QingCollectionViewModel
                     }),
             );
         } else if (action === "index") {
-            void this.perform(async () =>
+            void this.perform(async () => {
+                const raw = await hub.memoryVaultStatus(this.props.persona);
+                const status = recordOf(raw);
+                const parts: string[] = [status.ok === false ? _t("qing|vault_index_warn") : _t("qing|vault_index_ok")];
+                if (status.coverage !== undefined) {
+                    parts.push(_t("qing|vault_coverage", { v0: `${textOf(status.coverage)}%` }));
+                }
+                if (status.files !== undefined && status.total !== undefined) {
+                    parts.push(_t("qing|vault_files", { v0: textOf(status.files), v1: textOf(status.total) }));
+                }
+                if (status.entities !== undefined) {
+                    parts.push(_t("qing|vault_entities", { v0: textOf(status.entities) }));
+                }
+                if (status.pending !== undefined) {
+                    parts.push(_t("qing|vault_pending", { v0: textOf(status.pending) }));
+                }
+                if (status.failed !== undefined) {
+                    parts.push(_t("qing|vault_failed", { v0: textOf(status.failed) }));
+                }
                 this.snapshot.merge({
-                    result: formatHumanResult(await hub.memoryVaultStatus(this.props.persona)),
-                }),
-            );
+                    result: parts.join(" · "),
+                    rawResult: JSON.stringify(raw, null, 2),
+                });
+            });
         } else if (action === "delete-routine") {
             this.ask(
                 _t("qing|delete_routine_confirm"),
@@ -523,6 +544,111 @@ export class QingCollectionViewModel
                 const title =
                     textOf(item.title ?? item.label ?? item.name ?? item.action ?? item.started_at) ||
                     _t("qing|item_default");
+                if (resource === "vault") {
+                    const rawSummary = textOf(
+                        item.summary ?? item.description ?? item.detail ?? item.preview ?? item.content,
+                    );
+                    const cleaned = vaultBody(rawSummary).replace(/\s+/g, " ").trim();
+                    const summary = cleaned.length > 140 ? `${cleaned.slice(0, 140)}…` : cleaned;
+                    const time = textOf(item.updated_at ?? item.created_at ?? item.mtime);
+                    return {
+                        id,
+                        title: title.replace(/\.md$/i, ""),
+                        description: summary,
+                        meta: time || undefined,
+                        actions,
+                    };
+                }
+                if (resource === "connectors") {
+                    const tools = Array.isArray(item.tools) ? item.tools : [];
+                    const hasError = Boolean(item.error || item.last_error);
+                    const connected =
+                        item.connected === true ||
+                        item.configured === true ||
+                        item.status === "ok" ||
+                        item.status === "enabled" ||
+                        item.recordKind === "mcp";
+                    const badge =
+                        item.mode === "pending"
+                            ? { label: _t("qing|conn_pending"), tone: "warn" as const }
+                            : hasError
+                              ? { label: _t("qing|conn_error"), tone: "danger" as const }
+                              : connected
+                                ? { label: _t("qing|conn_connected"), tone: "ok" as const }
+                                : { label: _t("qing|conn_unconfigured"), tone: "warn" as const };
+                    const desc = [
+                        textOf(item.capability ?? item.description ?? item.detail),
+                        tools.length ? _t("qing|conn_tools_count", { v0: String(tools.length) }) : "",
+                        hasError ? friendlyError(item.error ?? item.last_error) : "",
+                    ]
+                        .filter(Boolean)
+                        .join(" · ");
+                    return { id, title, description: desc, meta: textOf(item.url) || undefined, badge, actions };
+                }
+                if (resource === "devices") {
+                    const revoked = Boolean(item.revoked);
+                    const badge = revoked
+                        ? { label: _t("qing|device_revoked"), tone: "danger" as const }
+                        : { label: _t("qing|device_active"), tone: "ok" as const };
+                    const desc = [
+                        textOf(item.platform ?? item.os ?? item.type),
+                        textOf(item.ip ?? item.remote_addr),
+                        textOf(item.device_id ?? item.id),
+                    ]
+                        .filter(Boolean)
+                        .join(" · ");
+                    const lastSeen = textOf(item.last_seen ?? item.updated_at);
+                    const createdAt = textOf(item.created_at);
+                    const meta = [
+                        lastSeen ? _t("qing|device_last_seen", { v0: lastSeen }) : "",
+                        createdAt ? _t("qing|device_created_at", { v0: createdAt }) : "",
+                    ]
+                        .filter(Boolean)
+                        .join(" · ");
+                    return { id, title, description: desc, meta: meta || undefined, badge, actions };
+                }
+                if (resource === "audit") {
+                    const failed =
+                        item.ok === false || item.status === "failed" || item.status === "error" || Boolean(item.error);
+                    const passed = item.ok === true || item.status === "ok" || item.status === "success";
+                    const badge = failed
+                        ? { label: _t("qing|text_0bc1fb72"), tone: "danger" as const }
+                        : passed
+                          ? { label: _t("qing|status_ok"), tone: "ok" as const }
+                          : undefined;
+                    const desc = [
+                        textOf(item.detail ?? item.summary ?? item.target ?? item.resource),
+                        item.error ? friendlyError(item.error) : "",
+                    ]
+                        .filter(Boolean)
+                        .join(" · ");
+                    const meta = [
+                        textOf(item.actor ?? item.device_name ?? item.persona),
+                        textOf(item.created_at ?? item.timestamp ?? item.started_at),
+                    ]
+                        .filter(Boolean)
+                        .join(" · ");
+                    return { id, title, description: desc, meta: meta || undefined, badge, actions };
+                }
+                if (resource === "diagnose") {
+                    const ok =
+                        item.ok === true || item.status === "ok" || item.status === "success" || item.passed === true;
+                    const badge = ok
+                        ? { label: _t("qing|diag_pass"), tone: "ok" as const }
+                        : { label: _t("qing|diag_fail"), tone: "danger" as const };
+                    const rawErr = textOf(item.error ?? item.last_error);
+                    const detail = textOf(item.detail ?? item.summary ?? item.message);
+                    const hint = ok
+                        ? detail || _t("qing|diag_ok_hint")
+                        : [
+                              textOf(item.hint ?? item.fix) || this.diagnoseFixHint(item),
+                              rawErr ? friendlyError(rawErr) : detail,
+                          ]
+                              .filter(Boolean)
+                              .join(" · ");
+                    const meta = item.ms !== undefined ? `${textOf(item.ms)} ms` : undefined;
+                    return { id, title, description: hint, meta, badge, actions };
+                }
                 const description = [
                     textOf(
                         item.description ??
@@ -780,6 +906,15 @@ export class QingCollectionViewModel
                 await hub.addMcpServer(textOf(item.name), url, this.values.token || undefined);
             } else await hub.saveConnector(textOf(item.id), this.values);
         }
+    }
+
+    private diagnoseFixHint(item: Record<string, unknown>): string {
+        const text = `${textOf(item.name ?? item.check)} ${textOf(item.error ?? item.detail)}`.toLowerCase();
+        if (/401|403|token|auth|unauthorized|pair/.test(text)) return _t("qing|diag_fix_auth");
+        if (/timeout|timed out/.test(text)) return _t("qing|diag_fix_timeout");
+        if (/key|credential|env/.test(text)) return _t("qing|diag_fix_key");
+        if (/network|fetch|econn|dns|url|http/.test(text)) return _t("qing|diag_fix_network");
+        return _t("qing|diag_fix_generic");
     }
 
     private validateUrl(value: string): void {

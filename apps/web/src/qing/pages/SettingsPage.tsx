@@ -33,7 +33,7 @@ import { DEFAULT_BASE_URL, hub, loadConfig, saveConfig } from "../hub";
 import { friendlyError } from "../status";
 import { Button, PageHeader, Scroll } from "../ui";
 import { palette } from "../theme";
-import { ListPage } from "./ListPage";
+import { PluginsPage } from "./PluginsPage";
 import { ModelPage } from "./ModelPage";
 import { UsagePage } from "./UsagePage";
 import { ServerPage } from "./ServerPage";
@@ -366,21 +366,7 @@ export const SettingsPage: React.FC<{
     if (route === "mcp") return <McpPage onBack={back} />;
     if (route === "privacy") return <PrivacyPage onBack={back} />;
 
-    if (route === "plugins")
-        return (
-            <ListPage
-                title={_t("qing|text_a1226a32")}
-                subtitle={_t("qing|text_d5b15ee4")}
-                onBack={back}
-                loader={() => hub.agentPlugins()}
-                columns={[
-                    { key: "name", title: true },
-                    { key: "version", label: _t("qing|text_5f76b2bf") },
-                    { key: "kind", label: _t("qing|text_ba40014f") },
-                    { key: "description", label: _t("qing|text_4262c45d") },
-                ]}
-            />
-        );
+    if (route === "plugins") return <PluginsPage onBack={back} />;
 
     if (route === "devices" || route === "audit" || route === "diagnose")
         return <QingPanel key={route} resource={route} persona={loadConfig().persona} onBack={back} />;

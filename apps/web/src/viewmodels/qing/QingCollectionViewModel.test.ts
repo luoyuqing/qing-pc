@@ -185,7 +185,29 @@ describe("Qing collection workflows", () => {
         const vm = await open("audit");
         vm.search("hermes");
         expect(vm.getSnapshot().rows).toHaveLength(1);
-        expect(vm.getSnapshot().rows[0].description).toContain("hermes");
+        expect(vm.getSnapshot().rows[0].meta).toContain("hermes");
+    });
+
+    it("formats vault index status as human summary while keeping raw JSON", async () => {
+        vi.mocked(hub.memoryVault).mockResolvedValue({
+            items: [{ name: "rule.md", title: "规则", content: "# 规则\n\n第一条内容", updated_at: "2026-11-26" }],
+        });
+        vi.mocked(hub.memoryVaultStatus).mockResolvedValue({
+            ok: true,
+            coverage: 99,
+            files: 167,
+            total: 168,
+            entities: 4691,
+            pending: 0,
+            failed: 0,
+        });
+        const vm = await open("vault");
+        expect(vm.getSnapshot().rows[0].description).toBe("第一条内容");
+        expect(vm.getSnapshot().rows[0].meta).toBe("2026-11-26");
+        vm.toolbar("index");
+        await vi.waitFor(() => expect(vm.getSnapshot().result).toContain("索引正常"));
+        expect(vm.getSnapshot().result).toContain("覆盖率 99%");
+        expect(vm.getSnapshot().rawResult).toContain('"entities": 4691');
     });
 
     it("shows diagnosis details", async () => {
