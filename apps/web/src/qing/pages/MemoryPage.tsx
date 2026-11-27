@@ -26,6 +26,7 @@ interface MemoryEntryCard {
     id: string;
     title: string;
     summary: string;
+    detail: string;
     time?: string;
 }
 
@@ -64,6 +65,7 @@ function parseMemoryEntries(markdown: string): MemoryEntryCard[] {
                     id: `mem-${idx}`,
                     title: clean.slice(0, 32) || _t("qing|text_7a6335b3"),
                     summary: clean,
+                    detail: chunk.trim(),
                 };
             })
             .filter((item) => item.summary);
@@ -74,6 +76,7 @@ function parseMemoryEntries(markdown: string): MemoryEntryCard[] {
             const dateMatch = /^(\d{4}[-/]\d{1,2}[-/]\d{1,2}(?:\s+\d{1,2}:\d{2})?)\s*(.*)$/.exec(sec.heading);
             const time = dateMatch ? dateMatch[1] : undefined;
             const rawTitle = (dateMatch ? dateMatch[2] : sec.heading).trim();
+            const detail = sec.body.join("\n").trim();
             const summary = sec.body
                 .join(" ")
                 .replace(/`([^`]+)`/g, "$1")
@@ -82,7 +85,13 @@ function parseMemoryEntries(markdown: string): MemoryEntryCard[] {
                 .replace(/\s+/g, " ")
                 .trim();
             if (!rawTitle && !summary) return null;
-            return { id: `mem-${idx}`, title: rawTitle || _t("qing|text_7a6335b3"), summary, time };
+            return {
+                id: `mem-${idx}`,
+                title: rawTitle || _t("qing|text_7a6335b3"),
+                summary,
+                detail: detail || summary,
+                time,
+            };
         })
         .filter((item): item is MemoryEntryCard => item !== null);
 }
@@ -166,6 +175,7 @@ export const MemoryPage: React.FC<{ onBack?: () => void; initialPersona?: string
     const [personaKey, setPersonaKey] = useState<string | null>(null);
     const [personaText, setPersonaText] = useState("");
     const [memoryQuery, setMemoryQuery] = useState("");
+    const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
     const [editingRawMemory, setEditingRawMemory] = useState(false);
     const [copiedRaw, setCopiedRaw] = useState(false);
     const [indexSummary, setIndexSummary] = useState<{ text: string; raw: string } | null>(null);
@@ -489,62 +499,110 @@ export const MemoryPage: React.FC<{ onBack?: () => void; initialPersona?: string
                                 {memoryEntries.length === 0 ? (
                                     <Empty text={_t("qing|text_70a40a53")} />
                                 ) : (
-                                    <div
-                                        style={{
-                                            display: "grid",
-                                            gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-                                            gap: 12,
-                                            alignItems: "stretch",
-                                        }}
-                                    >
-                                        {memoryEntries.map((entry) => (
-                                            <Card
-                                                key={entry.id}
-                                                style={{
-                                                    height: "100%",
-                                                    display: "flex",
-                                                    flexDirection: "column",
-                                                    gap: 6,
-                                                }}
-                                            >
-                                                <div
+                                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                                        {memoryEntries.map((entry) => {
+                                            const expanded = expandedEntryId === entry.id;
+                                            return (
+                                                <Card
+                                                    key={entry.id}
+                                                    aria-expanded={expanded}
+                                                    onClick={() =>
+                                                        setExpandedEntryId((prev) =>
+                                                            prev === entry.id ? null : entry.id,
+                                                        )
+                                                    }
                                                     style={{
-                                                        font: "var(--cpd-font-body-md-semibold)",
-                                                        color: p.text,
-                                                        overflow: "hidden",
-                                                        textOverflow: "ellipsis",
-                                                        whiteSpace: "nowrap",
+                                                        width: "100%",
+                                                        boxSizing: "border-box",
+                                                        display: "flex",
+                                                        flexDirection: "column",
+                                                        gap: 8,
+                                                        cursor: "pointer",
                                                     }}
                                                 >
-                                                    {entry.title}
-                                                </div>
-                                                <div
-                                                    style={{
-                                                        font: "var(--cpd-font-body-sm-regular)",
-                                                        color: p.textDim,
-                                                        flex: 1,
-                                                        display: "-webkit-box",
-                                                        WebkitLineClamp: 3,
-                                                        WebkitBoxOrient: "vertical",
-                                                        overflow: "hidden",
-                                                    }}
-                                                >
-                                                    {entry.summary || "—"}
-                                                </div>
-                                                {entry.time && (
                                                     <div
                                                         style={{
-                                                            font: "var(--cpd-font-body-xs-regular)",
-                                                            color: p.textDim,
-                                                            paddingTop: 6,
-                                                            borderTop: `1px solid ${p.divider}`,
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            justifyContent: "space-between",
+                                                            gap: 12,
+                                                            flexWrap: "wrap",
                                                         }}
                                                     >
-                                                        {entry.time}
+                                                        <span
+                                                            style={{
+                                                                font: "var(--cpd-font-body-md-semibold)",
+                                                                color: p.text,
+                                                                flex: 1,
+                                                                minWidth: 0,
+                                                                wordBreak: "break-word",
+                                                            }}
+                                                        >
+                                                            {entry.title}
+                                                        </span>
+                                                        <div
+                                                            style={{
+                                                                display: "flex",
+                                                                alignItems: "center",
+                                                                gap: 10,
+                                                                flexShrink: 0,
+                                                            }}
+                                                        >
+                                                            {entry.time && (
+                                                                <span
+                                                                    style={{
+                                                                        font: "var(--cpd-font-body-xs-regular)",
+                                                                        color: p.textDim,
+                                                                    }}
+                                                                >
+                                                                    {entry.time}
+                                                                </span>
+                                                            )}
+                                                            <span
+                                                                style={{
+                                                                    font: "var(--cpd-font-body-xs-regular)",
+                                                                    color: p.accent,
+                                                                }}
+                                                            >
+                                                                {expanded
+                                                                    ? _t("qing|memory_collapse")
+                                                                    : _t("qing|memory_expand")}
+                                                            </span>
+                                                        </div>
                                                     </div>
-                                                )}
-                                            </Card>
-                                        ))}
+                                                    {expanded ? (
+                                                        <div
+                                                            style={{
+                                                                font: "var(--cpd-font-body-sm-regular)",
+                                                                color: p.text,
+                                                                lineHeight: 1.7,
+                                                                paddingTop: 8,
+                                                                borderTop: `1px solid ${p.divider}`,
+                                                                whiteSpace: "pre-wrap",
+                                                                wordBreak: "break-word",
+                                                            }}
+                                                        >
+                                                            {entry.detail || "—"}
+                                                        </div>
+                                                    ) : (
+                                                        <div
+                                                            style={{
+                                                                font: "var(--cpd-font-body-sm-regular)",
+                                                                color: p.textDim,
+                                                                lineHeight: 1.6,
+                                                                display: "-webkit-box",
+                                                                WebkitLineClamp: 3,
+                                                                WebkitBoxOrient: "vertical",
+                                                                overflow: "hidden",
+                                                                wordBreak: "break-word",
+                                                            }}
+                                                        >
+                                                            {entry.summary || "—"}
+                                                        </div>
+                                                    )}
+                                                </Card>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </>

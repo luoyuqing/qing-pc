@@ -127,15 +127,17 @@ export const Pill: React.FC<{
 };
 
 export const Card: React.FC<{
-    children: React.ReactNode;
-    onClick?: () => void;
-    style?: React.CSSProperties;
-}> = ({ children, onClick, style }): React.ReactNode => {
+    "children": React.ReactNode;
+    "onClick"?: () => void;
+    "style"?: React.CSSProperties;
+    "aria-expanded"?: boolean;
+}> = ({ children, onClick, style, "aria-expanded": ariaExpanded }): React.ReactNode => {
     const p = palette();
     return (
         <div
             role={onClick ? "button" : undefined}
             tabIndex={onClick ? 0 : undefined}
+            aria-expanded={ariaExpanded}
             onKeyDown={(event) => {
                 if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
                     event.preventDefault();

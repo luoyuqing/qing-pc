@@ -32,6 +32,7 @@ async function mockHub(page: Page): Promise<{ writes: { path: string; body: unkn
                 items: [
                     { kind: "morning", content: "# 今日简报\n\n会议和待办已整理。", created_at: "2026-11-25T07:30:00" },
                 ],
+                pending: ["evening"],
                 stats: { sessions: 3 },
                 todos: [],
             },
@@ -48,9 +49,40 @@ async function mockHub(page: Page): Promise<{ writes: { path: string; body: unkn
             },
             "/routines/brief/history": { items: [{ id: "run1", status: "success", summary: "完成" }] },
             "/memory/bundle": {
-                memory: { memory: { content: "喜欢简洁的回复" }, profile: { content: "工作日办公" } },
+                memory: {
+                    memory: {
+                        content:
+                            "## 2026-11-27 代理配置\nsing-box: 韩服主力+双机场fallback(83池),guard失败自动切;lyq本机/opt/clash(7890/7891,final=韩国-auto)",
+                    },
+                    profile: { content: "工作日办公" },
+                },
                 skills: [],
                 entries: [],
+            },
+            "/agent/bundle": {
+                model: {
+                    key: "main",
+                    label: "主模型",
+                    model: "deepseek-chat",
+                    base_url: "https://api.deepseek.com/v1",
+                },
+                candidates: [
+                    {
+                        key: "c1",
+                        label: "备用模型",
+                        model: "gpt-4o",
+                        base_url: "https://api.openai.com/v1",
+                        key_env: "OPENAI_API_KEY",
+                    },
+                ],
+            },
+            "/agent/credentials": {
+                items: [
+                    ...Array.from({ length: 10 }, (_, i) => ({ name: `PROVIDER_${i}_KEY` })),
+                    { name: "CF2_PAGES_TOKEN" },
+                    { name: "comfy-token" },
+                    { name: "SMTP_PASS" },
+                ],
             },
             "/memory/vault": { items: [{ name: "fact.md", title: "工作偏好", preview: "下午开会" }] },
             "/memory/vault/note": { content: "# 工作偏好\ncreated_at: yesterday\n\n下午开会" },
@@ -179,4 +211,46 @@ test("renders narrow and wide panels and follows Element theme changes", async (
         await page.screenshot({ path: `/data/home/qing-work/output/screenshots/settings-${theme}-1440.png` });
     }
     await expect(page.getByText(/missing translation|qing\|text_/)).toHaveCount(0);
+});
+
+test("verifies round 5 briefing pending card, memory full-width cards, model credentials and version 1.12.35", async ({
+    pageWithCredentials: page,
+}) => {
+    await mockHub(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/");
+    await rejectToastIfExists(page, "Verify this device");
+    await rejectToastIfExists(page, "Notifications");
+
+    const versionRes = await page.request.get("/version");
+    expect((await versionRes.text()).trim()).toMatch(/^1\.12\.35(?:-dev)?$/);
+
+    const nav = page.getByRole("navigation", { name: "Main navigation" });
+    await nav.getByRole("button", { name: "Briefing" }).click();
+    await expect(page.getByText("今日简报", { exact: true })).toBeVisible();
+    await expect(page.getByText("Pending generation")).toHaveCount(0);
+    await page.screenshot({ path: "/data/home/qing-work/output/screenshots/briefing-morning-no-pending.png" });
+
+    await page.getByRole("button", { name: "Evening briefing" }).click();
+    await expect(page.getByText("Pending generation")).toBeVisible();
+    await expect(page.getByText("· evening")).toBeVisible();
+    await page.screenshot({ path: "/data/home/qing-work/output/screenshots/briefing-evening-pending.png" });
+
+    await nav.getByRole("button", { name: "Settings" }).click();
+    await page.getByText("Memory", { exact: true }).click();
+    const memCard = page.getByRole("button", { name: /代理配置/ });
+    await expect(memCard).toHaveAttribute("aria-expanded", "false");
+    const memBox = await memCard.boundingBox();
+    expect(memBox?.width ?? 0).toBeGreaterThan(700);
+    await page.screenshot({ path: "/data/home/qing-work/output/screenshots/memory-fullwidth-collapsed.png" });
+    await memCard.click();
+    await expect(memCard).toHaveAttribute("aria-expanded", "true");
+    await page.screenshot({ path: "/data/home/qing-work/output/screenshots/memory-fullwidth-expanded.png" });
+
+    await page.getByRole("button", { name: "Back", exact: true }).click();
+    await page.getByText("Models and inference", { exact: true }).click();
+    await page.getByRole("button", { name: "Add candidate" }).click();
+    await expect(page.getByRole("button", { name: "CF2_PAGES_TOKEN" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "comfy-token" })).toBeVisible();
+    await page.screenshot({ path: "/data/home/qing-work/output/screenshots/model-credentials-search.png" });
 });

@@ -12,10 +12,167 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { statusLabel } from "../status";
 import { confirmAction, editText } from "../dialogs";
 import { QingPanel } from "../QingPanel";
-import { HubError, hub, loadConfig, saveConfig } from "../hub";
+import { HubError, hub, itemsOf, loadConfig, saveConfig } from "../hub";
 import { PersonaPicker } from "../PersonaPicker";
 import { Button, Card, ErrorBox, Loading, PageHeader, Scroll } from "../ui";
 import { palette } from "../theme";
+
+interface CredentialOption {
+    name: string;
+}
+
+/**
+ * Filter credential items to key/token/secret-like entries without truncation.
+ * Matches mobile 1.21.28 so tokens like CF2_PAGES_TOKEN or comfy-token are included.
+ */
+function filterKeyCredentials(raw: unknown): CredentialOption[] {
+    return itemsOf(raw)
+        .filter((item) => {
+            const name = `${item?.name ?? ""}`.toUpperCase();
+            return name.includes("KEY") || name.includes("TOKEN") || name.includes("SECRET");
+        })
+        .map((item) => ({ name: `${item.name}` }));
+}
+
+const CredentialSelector: React.FC<{
+    keyEnv: string;
+    onKeyEnvChange: (value: string) => void;
+    useNewEnv: boolean;
+    onUseNewEnvChange: (value: boolean) => void;
+    newEnvValue: string;
+    onNewEnvValueChange: (value: string) => void;
+    creds: CredentialOption[];
+    credQuery: string;
+    onCredQueryChange: (value: string) => void;
+    inputStyle: React.CSSProperties;
+}> = ({
+    keyEnv,
+    onKeyEnvChange,
+    useNewEnv,
+    onUseNewEnvChange,
+    newEnvValue,
+    onNewEnvValueChange,
+    creds,
+    credQuery,
+    onCredQueryChange,
+    inputStyle,
+}): React.ReactNode => {
+    const p = palette();
+    const queryUpper = credQuery.trim().toUpperCase();
+    const filteredCreds = queryUpper ? creds.filter((c) => c.name.toUpperCase().includes(queryUpper)) : creds;
+
+    return (
+        <div style={{ display: "grid", gap: 8 }}>
+            {!useNewEnv ? (
+                <>
+                    {creds.length > 0 && (
+                        <>
+                            {creds.length > 10 && (
+                                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                                    <input
+                                        type="search"
+                                        aria-label={_t("qing|cred_search", { v0: String(creds.length) })}
+                                        placeholder={_t("qing|cred_search", { v0: String(creds.length) })}
+                                        value={credQuery}
+                                        onChange={(e) => onCredQueryChange(e.target.value)}
+                                        style={{ ...inputStyle, flex: 1 }}
+                                    />
+                                    {credQuery && (
+                                        <Button onClick={() => onCredQueryChange("")}>
+                                            {_t("qing|cred_clear_search")}
+                                        </Button>
+                                    )}
+                                </div>
+                            )}
+                            {filteredCreds.length === 0 ? (
+                                <div style={{ font: "var(--cpd-font-body-xs-regular)", color: p.textDim }}>
+                                    {_t("qing|cred_no_match")}
+                                </div>
+                            ) : (
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                    {filteredCreds.map((c) => {
+                                        const selected = keyEnv === c.name;
+                                        return (
+                                            <button
+                                                key={c.name}
+                                                type="button"
+                                                aria-pressed={selected}
+                                                onClick={() => onKeyEnvChange(c.name)}
+                                                style={{
+                                                    font: "var(--cpd-font-body-xs-regular)",
+                                                    padding: "3px 9px",
+                                                    borderRadius: 999,
+                                                    cursor: "pointer",
+                                                    border: `1px solid ${selected ? p.accent : p.divider}`,
+                                                    background: selected ? p.accentSoft : p.bgAlt,
+                                                    color: selected ? p.accent : p.text,
+                                                }}
+                                            >
+                                                {c.name}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </>
+                    )}
+                    <div>
+                        <div style={{ font: "var(--cpd-font-body-xs-regular)", color: p.textDim, marginBottom: 3 }}>
+                            {_t("qing|text_3b3585b2")}
+                        </div>
+                        <input
+                            aria-label={_t("qing|text_3b3585b2")}
+                            value={keyEnv}
+                            onChange={(e) => onKeyEnvChange(e.target.value)}
+                            placeholder="DEEPSEEK_API_KEY"
+                            style={inputStyle}
+                        />
+                    </div>
+                </>
+            ) : (
+                <>
+                    <div>
+                        <div style={{ font: "var(--cpd-font-body-xs-regular)", color: p.textDim, marginBottom: 3 }}>
+                            {_t("qing|cred_new_env_name")}
+                        </div>
+                        <input
+                            aria-label={_t("qing|cred_new_env_name")}
+                            value={keyEnv}
+                            onChange={(e) => onKeyEnvChange(e.target.value)}
+                            placeholder="DEEPSEEK_API_KEY"
+                            style={inputStyle}
+                        />
+                    </div>
+                    <div>
+                        <div style={{ font: "var(--cpd-font-body-xs-regular)", color: p.textDim, marginBottom: 3 }}>
+                            {_t("qing|cred_new_env_value")}
+                        </div>
+                        <input
+                            type="password"
+                            aria-label={_t("qing|cred_new_env_value")}
+                            value={newEnvValue}
+                            onChange={(e) => onNewEnvValueChange(e.target.value)}
+                            style={inputStyle}
+                        />
+                    </div>
+                </>
+            )}
+            <label
+                style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    font: "var(--cpd-font-body-xs-regular)",
+                    color: p.textDim,
+                    cursor: "pointer",
+                }}
+            >
+                <input type="checkbox" checked={useNewEnv} onChange={(e) => onUseNewEnvChange(e.target.checked)} />
+                <span>{_t("qing|cred_use_new_env")}</span>
+            </label>
+        </div>
+    );
+};
 
 export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.ReactNode => {
     const generation = useRef(0);
@@ -33,12 +190,18 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
     const [editModelVal, setEditModelVal] = useState("");
     const [editBaseVal, setEditBaseVal] = useState("");
     const [editKeyEnvVal, setEditKeyEnvVal] = useState("");
+    const [editUseNewEnv, setEditUseNewEnv] = useState(false);
+    const [editNewEnvVal, setEditNewEnvVal] = useState("");
     const [adding, setAdding] = useState(false);
     const [nk, setNk] = useState("");
     const [nl, setNl] = useState("");
     const [nm, setNm] = useState("");
     const [nb, setNb] = useState("");
     const [ne, setNe] = useState("");
+    const [addUseNewEnv, setAddUseNewEnv] = useState(false);
+    const [addNewEnvVal, setAddNewEnvVal] = useState("");
+    const [creds, setCreds] = useState<CredentialOption[]>([]);
+    const [credQuery, setCredQuery] = useState("");
     const [tick, setTick] = useState(0);
     const [editingFallback, setEditingFallback] = useState(false);
     const [fallbackDraft, setFallbackDraft] = useState<
@@ -52,6 +215,7 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
         setLoading(true);
         setError(null);
         try {
+            const credPromise = hub.agentCredentials(false).catch(() => []);
             try {
                 const bundle = await hub.agentBundle(persona);
                 if (id === generation.current) setData(bundle);
@@ -60,6 +224,8 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
                 const model = await hub.agentModel(persona);
                 if (id === generation.current) setData(model);
             }
+            const rawCreds = await credPromise;
+            if (id === generation.current) setCreds(filterKeyCredentials(rawCreds));
         } catch (e) {
             if (id === generation.current) setError((e as Error).message);
         }
@@ -124,24 +290,32 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
             setError(_t("qing|text_7f192585"));
             return;
         }
+        if (addUseNewEnv && !addNewEnvVal.trim()) {
+            setError(_t("qing|cred_new_env_required"));
+            return;
+        }
         setBusy("add");
         try {
-            await hub.addCandidate(
-                {
-                    key: nk.trim(),
-                    label: nl.trim() || nk.trim(),
-                    model: nm.trim(),
-                    base_url: nb.trim(),
-                    key_env: ne.trim() || undefined,
-                    scope: "persona",
-                },
-                persona,
-            );
+            const payload: Record<string, unknown> = {
+                key: nk.trim(),
+                label: nl.trim() || nk.trim(),
+                model: nm.trim(),
+                base_url: nb.trim(),
+                key_env: ne.trim() || undefined,
+                scope: "persona",
+            };
+            if (addUseNewEnv) {
+                payload.new_env_value = addNewEnvVal.trim();
+            }
+            await hub.addCandidate(payload, persona);
             setNk("");
             setNl("");
             setNm("");
             setNb("");
             setNe("");
+            setAddUseNewEnv(false);
+            setAddNewEnvVal("");
+            setCredQuery("");
             setAdding(false);
             await load();
         } catch (e) {
@@ -171,6 +345,9 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
         setEditModelVal(c.model || "");
         setEditBaseVal(c.base_url || "");
         setEditKeyEnvVal(c.key_env || "");
+        setEditUseNewEnv(false);
+        setEditNewEnvVal("");
+        setCredQuery("");
     };
 
     const saveEditCandidate = async (c: any): Promise<void> => {
@@ -178,22 +355,27 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
             setError(_t("qing|text_7f192585"));
             return;
         }
+        if (editUseNewEnv && !editNewEnvVal.trim()) {
+            setError(_t("qing|cred_new_env_required"));
+            return;
+        }
         setBusy(`edit:${c.key}`);
         setError(null);
         try {
-            await hub.updateCandidate(
-                c.key,
-                persona,
-                {
-                    label: editLabelVal.trim() || c.key,
-                    model: editModelVal.trim(),
-                    base_url: editBaseVal.trim(),
-                    key_env: editKeyEnvVal.trim() || undefined,
-                    api_mode: c.api_mode || "chat_completions",
-                },
-                "persona",
-            );
+            const fields: Record<string, unknown> = {
+                label: editLabelVal.trim() || c.key,
+                model: editModelVal.trim(),
+                base_url: editBaseVal.trim(),
+                key_env: editKeyEnvVal.trim() || undefined,
+                api_mode: c.api_mode || "chat_completions",
+            };
+            if (editUseNewEnv) {
+                fields.new_env_value = editNewEnvVal.trim();
+            }
+            await hub.updateCandidate(c.key, persona, fields, "persona");
             setEditingKey(null);
+            setEditUseNewEnv(false);
+            setEditNewEnvVal("");
             await load();
         } catch (e) {
             setError(_t("qing|text_2ecda40c", { v0: (e as Error).message }));
@@ -465,15 +647,17 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
                                 ))}
                             </div>
                             <div style={{ marginTop: 8 }}>
-                                <div style={{ fontSize: 11, color: p.textDim, marginBottom: 3 }}>
-                                    {_t("qing|text_3b3585b2")}
-                                </div>
-                                <input
-                                    aria-label={_t("qing|text_3b3585b2")}
-                                    value={ne}
-                                    onChange={(e) => setNe(e.target.value)}
-                                    placeholder="DEEPSEEK_API_KEY"
-                                    style={inputStyle}
+                                <CredentialSelector
+                                    keyEnv={ne}
+                                    onKeyEnvChange={setNe}
+                                    useNewEnv={addUseNewEnv}
+                                    onUseNewEnvChange={setAddUseNewEnv}
+                                    newEnvValue={addNewEnvVal}
+                                    onNewEnvValueChange={setAddNewEnvVal}
+                                    creds={creds}
+                                    credQuery={credQuery}
+                                    onCredQueryChange={setCredQuery}
+                                    inputStyle={inputStyle}
                                 />
                             </div>
                             <div style={{ marginTop: 10 }}>
@@ -747,21 +931,18 @@ export const ModelPage: React.FC<{ onBack?: () => void }> = ({ onBack }): React.
                                                         style={inputStyle}
                                                     />
                                                 </div>
-                                                <div>
-                                                    <div
-                                                        style={{
-                                                            font: "var(--cpd-font-body-xs-regular)",
-                                                            color: p.textDim,
-                                                            marginBottom: 3,
-                                                        }}
-                                                    >
-                                                        {_t("qing|text_3b3585b2")}
-                                                    </div>
-                                                    <input
-                                                        aria-label={_t("qing|text_3b3585b2")}
-                                                        value={editKeyEnvVal}
-                                                        onChange={(e) => setEditKeyEnvVal(e.target.value)}
-                                                        style={inputStyle}
+                                                <div style={{ gridColumn: "1 / -1" }}>
+                                                    <CredentialSelector
+                                                        keyEnv={editKeyEnvVal}
+                                                        onKeyEnvChange={setEditKeyEnvVal}
+                                                        useNewEnv={editUseNewEnv}
+                                                        onUseNewEnvChange={setEditUseNewEnv}
+                                                        newEnvValue={editNewEnvVal}
+                                                        onNewEnvValueChange={setEditNewEnvVal}
+                                                        creds={creds}
+                                                        credQuery={credQuery}
+                                                        onCredQueryChange={setCredQuery}
+                                                        inputStyle={inputStyle}
                                                     />
                                                 </div>
                                             </div>

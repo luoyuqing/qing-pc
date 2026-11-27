@@ -576,4 +576,128 @@ describe("Qing page workflows", () => {
         await waitFor(() => expect(loadConfig().token).toBe("new-token"));
         expect(loadConfig().baseUrl).toBe("https://new.test");
     });
+
+    it("filters key/token/secret credentials without truncation and searches when over 10", async () => {
+        const creds = [
+            ...Array.from({ length: 11 }, (_, i) => ({ name: `PROVIDER_${i}_KEY` })),
+            { name: "CF2_PAGES_TOKEN" },
+            { name: "comfy-token" },
+            { name: "APP_SECRET" },
+            { name: "SMTP_PASS" },
+        ];
+        vi.mocked(hub.agentBundle).mockResolvedValue({ model: {}, candidates: [] });
+        vi.mocked(hub.agentCredentials).mockResolvedValue({ items: creds });
+        render(<ModelPage />);
+        fireEvent.click(await screen.findByRole("button", { name: "新增候选" }));
+        expect(screen.getByRole("button", { name: "CF2_PAGES_TOKEN" })).toBeVisible();
+        expect(screen.getByRole("button", { name: "comfy-token" })).toBeVisible();
+        expect(screen.getByRole("button", { name: "APP_SECRET" })).toBeVisible();
+        expect(screen.queryByRole("button", { name: "SMTP_PASS" })).not.toBeInTheDocument();
+
+        const search = screen.getByRole("searchbox");
+        fireEvent.change(search, { target: { value: "comfy" } });
+        expect(screen.getByRole("button", { name: "comfy-token" })).toBeVisible();
+        expect(screen.queryByRole("button", { name: "CF2_PAGES_TOKEN" })).not.toBeInTheDocument();
+
+        fireEvent.change(search, { target: { value: "not_existing_xyz" } });
+        expect(screen.getByText("没有匹配的凭据")).toBeVisible();
+    });
+
+    it("validates and passes new_env_value on candidate create and edit", async () => {
+        vi.mocked(hub.agentBundle).mockResolvedValue({
+            model: {},
+            candidates: [{ key: "c1", label: "C1", model: "m1", base_url: "https://a.test/v1", key_env: "OLD_KEY" }],
+        });
+        vi.mocked(hub.agentCredentials).mockResolvedValue({ items: [{ name: "OLD_KEY" }] });
+        render(<ModelPage />);
+
+        // Create mode: toggle new env, block empty secret, then submit with custom name + secret
+        fireEvent.click(await screen.findByRole("button", { name: "新增候选" }));
+        fireEvent.change(screen.getByLabelText("标识 key"), { target: { value: "c2" } });
+        fireEvent.change(screen.getByLabelText("模型"), { target: { value: "m2" } });
+        fireEvent.change(screen.getByLabelText("端点"), { target: { value: "https://b.test/v1" } });
+        fireEvent.click(screen.getByLabelText("新建一个环境变量"));
+        expect(screen.queryByRole("button", { name: "OLD_KEY" })).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "加入候选池" }));
+        expect(screen.getByText("填一下密钥值，或关掉「新建一个环境变量」")).toBeVisible();
+        expect(hub.addCandidate).not.toHaveBeenCalled();
+
+        fireEvent.change(screen.getByLabelText("新变量名（留空自动生成）"), { target: { value: "MY_CUSTOM_KEY" } });
+        fireEvent.change(screen.getByLabelText("密钥值（只写不读，保存后不再显示）"), {
+            target: { value: "sk-new-secret" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "加入候选池" }));
+        await waitFor(() =>
+            expect(hub.addCandidate).toHaveBeenCalledWith(
+                {
+                    key: "c2",
+                    label: "c2",
+                    model: "m2",
+                    base_url: "https://b.test/v1",
+                    key_env: "MY_CUSTOM_KEY",
+                    new_env_value: "sk-new-secret",
+                    scope: "persona",
+                },
+                "default",
+            ),
+        );
+
+        // Edit mode: toggle new env and pass new_env_value
+        fireEvent.click(await screen.findByRole("button", { name: "编辑" }));
+        fireEvent.click(screen.getByLabelText("新建一个环境变量"));
+        fireEvent.change(screen.getByLabelText("密钥值（只写不读，保存后不再显示）"), {
+            target: { value: "sk-updated" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "保存" }));
+        await waitFor(() =>
+            expect(hub.updateCandidate).toHaveBeenCalledWith(
+                "c1",
+                "default",
+                expect.objectContaining({
+                    key_env: "OLD_KEY",
+                    new_env_value: "sk-updated",
+                }),
+                "persona",
+            ),
+        );
+    });
+
+    it("shows pending briefing card only on the matching pending tab", async () => {
+        vi.mocked(hub.briefingDay).mockResolvedValue({
+            items: [{ kind: "morning", content: "早安，主人", created_at: "2026-11-27T07:00:00Z" }],
+            pending: ["evening"],
+            todos: [],
+            stats: { sessions: 1, todos_open: 0, notifications: 0 },
+        });
+        render(<BriefingPage />);
+        await screen.findByText("早安，主人");
+        expect(screen.queryByText("待生成")).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: "晚报" }));
+        expect(await screen.findByText("待生成")).toBeVisible();
+        expect(screen.getByText("· evening")).toBeVisible();
+    });
+
+    it("renders full-width expandable memory cards while keeping actions available", async () => {
+        vi.mocked(hub.memoryBundle).mockResolvedValue({
+            memory: {
+                memory: {
+                    content: "## 2026-11-27 代理配置\nsing-box: 韩服主力\n详细说明第二行",
+                },
+                profile: { content: "画像内容" },
+            },
+            skills: [],
+            entries: [],
+        });
+        render(<MemoryPage initialPersona="default" />);
+        const card = await screen.findByRole("button", { name: /代理配置/ });
+        expect(card).toHaveAttribute("aria-expanded", "false");
+        fireEvent.click(card);
+        expect(card).toHaveAttribute("aria-expanded", "true");
+        expect(screen.getByText(/详细说明第二行/)).toBeVisible();
+        expect(screen.getByRole("button", { name: "刷新" })).toBeVisible();
+        expect(screen.getByRole("button", { name: "索引状态" })).toBeVisible();
+        expect(screen.getByRole("button", { name: "复制原始数据" })).toBeVisible();
+        expect(screen.getByRole("button", { name: "编辑" })).toBeVisible();
+    });
 });

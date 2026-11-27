@@ -113,6 +113,7 @@ export const BriefingPage: React.FC = (): React.ReactNode => {
     };
 
     const current = items.find((x) => x.kind === kind);
+    const visiblePending = current?.content ? [] : pending.filter((x) => x === kind);
     const isToday = date === today();
     const schedule = routines
         .filter((routine) =>
@@ -341,12 +342,12 @@ export const BriefingPage: React.FC = (): React.ReactNode => {
                         {stats.todos_open ?? todos.filter((todo) => !todo.done).length} {_t("qing|text_15465dbc")}{" "}
                         {stats.notifications ?? 0}
                     </div>
-                    {pending.length > 0 && (
+                    {visiblePending.length > 0 && (
                         <Card style={{ marginBottom: 14, background: p.accentSoft, borderColor: "transparent" }}>
                             <div style={{ fontSize: 12, fontWeight: 600, color: p.text, marginBottom: 4 }}>
                                 {_t("qing|text_49933a19")}
                             </div>
-                            {pending.map((x, i) => (
+                            {visiblePending.map((x) => (
                                 <div key={x} style={{ fontSize: 12, color: p.textDim }}>
                                     · {x}
                                 </div>
