@@ -630,7 +630,7 @@
         "mode_plain": "隐藏文字格式化选项",
         "mode_rich_text": "显示文字格式化选项",
         "no_perms_notice": "你无权在此房间发送消息",
-        "placeholder": "发送未加密消息…",
+        "placeholder": "发送消息…",
         "placeholder_encrypted": "发送加密消息…",
         "placeholder_reply": "发送回复…",
         "placeholder_reply_encrypted": "发送加密回复…",
